@@ -295,7 +295,8 @@ add_dns_option_item (GPtrArray *array, const char *str, gboolean ipv6)
 }
 
 static void
-add_ip4_domains (GPtrArray *array, NMIP4Config *src, gboolean dup)
+add_ip4_domains (GPtrArray *array, NMIP4Config *src, gboolean dup,
+                 gboolean search_only)
 {
 	unsigned num_domains, num_searches, i;
 	const char *domain;
@@ -305,6 +306,8 @@ add_ip4_domains (GPtrArray *array, NMIP4Config *src, gboolean dup)
 
 	for (i = 0; i < num_searches; i++) {
 		domain = nm_ip4_config_get_search (src, i);
+		if (domain[0] == '~' && search_only)
+			continue;
 		if (!domain_is_valid (domain))
 			continue;
 		add_string_item (array, domain, dup);
@@ -313,6 +316,8 @@ add_ip4_domains (GPtrArray *array, NMIP4Config *src, gboolean dup)
 	if (num_domains > 1 || !num_searches) {
 		for (i = 0; i < num_domains; i++) {
 			domain = nm_ip4_config_get_domain (src, i);
+			if (domain[0] == '~' && search_only)
+				continue;
 			if (!domain_is_valid (domain))
 				continue;
 			add_string_item (array, domain, dup);
@@ -340,7 +345,7 @@ merge_one_ip4_config (NMResolvConfData *rc, NMIP4Config *src)
 		add_dns_option_item (rc->options, option, FALSE);
 	}
 
-	add_ip4_domains (rc->searches, src, TRUE);
+	add_ip4_domains (rc->searches, src, TRUE, TRUE);
 
 	/* NIS stuff */
 	num = nm_ip4_config_get_num_nis_servers (src);
@@ -358,7 +363,7 @@ merge_one_ip4_config (NMResolvConfData *rc, NMIP4Config *src)
 }
 
 static void
-add_ip6_domains (GPtrArray *array, NMIP6Config *src, gboolean dup)
+add_ip6_domains (GPtrArray *array, NMIP6Config *src, gboolean dup, gboolean search_only)
 {
 	unsigned num_domains, num_searches, i;
 	const char *domain;
@@ -368,6 +373,10 @@ add_ip6_domains (GPtrArray *array, NMIP6Config *src, gboolean dup)
 
 	for (i = 0; i < num_searches; i++) {
 		domain = nm_ip6_config_get_search (src, i);
+		if (domain[0] == '~') {
+			if (search_only)
+				continue;
+		}
 		if (!domain_is_valid (domain))
 			continue;
 		add_string_item (array, domain, TRUE);
@@ -376,6 +385,10 @@ add_ip6_domains (GPtrArray *array, NMIP6Config *src, gboolean dup)
 	if (num_domains > 1 || !num_searches) {
 		for (i = 0; i < num_domains; i++) {
 			domain = nm_ip6_config_get_domain (src, i);
+			if (domain[0] == '~') {
+				if (search_only)
+					continue;
+			}
 			if (!domain_is_valid (domain))
 				continue;
 			add_string_item (array, domain, dup);
@@ -408,7 +421,7 @@ merge_one_ip6_config (NMResolvConfData *rc, NMIP6Config *src, const char *iface)
 		add_string_item (rc->nameservers, buf, TRUE);
 	}
 
-	add_ip6_domains (rc->searches, src, TRUE);
+	add_ip6_domains (rc->searches, src, TRUE, TRUE);
 
 	num = nm_ip6_config_get_num_dns_options (src);
 	for (i = 0; i < num; i++) {
@@ -1966,7 +1979,7 @@ _get_config_variant (NMDnsManager *self)
 				gs_unref_ptrarray GPtrArray *array = NULL;
 
 				array = g_ptr_array_sized_new (num);
-				add_ip4_domains (array, config, FALSE);
+				add_ip4_domains (array, config, FALSE, FALSE);
 				if (array->len) {
 					g_variant_builder_init (&strv_builder, G_VARIANT_TYPE ("as"));
 					for (j = 0; j < array->len; j++) {
@@ -2012,7 +2025,7 @@ _get_config_variant (NMDnsManager *self)
 				gs_unref_ptrarray GPtrArray *array = NULL;
 
 				array = g_ptr_array_sized_new (num);
-				add_ip6_domains (array, config, FALSE);
+				add_ip6_domains (array, config, FALSE, FALSE);
 				if (array->len) {
 					g_variant_builder_init (&strv_builder, G_VARIANT_TYPE ("as"));
 					for (j = 0; j < array->len; j++) {

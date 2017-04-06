@@ -159,6 +159,18 @@ add_dnsmasq_nameserver (NMDnsDnsmasq *self,
 	g_variant_builder_close (servers);
 }
 
+static const char *
+clean_domain (const char *domain)
+{
+	/* The manager already added search domains to resolv.conf.
+	 * Here we don't care about the distinction between routing
+	 * and other domains. */
+	if (domain[0] == '~')
+		return domain + 1;
+	else
+		return domain;
+}
+
 static gboolean
 add_ip4_config (NMDnsDnsmasq *self, GVariantBuilder *servers, NMIP4Config *ip4,
                 const char *iface, gboolean split)
@@ -189,7 +201,7 @@ add_ip4_config (NMDnsDnsmasq *self, GVariantBuilder *servers, NMIP4Config *ip4,
 				add_dnsmasq_nameserver (self,
 				                        servers,
 				                        buf,
-				                        nm_ip4_config_get_search (ip4, i));
+				                        clean_domain (nm_ip4_config_get_search (ip4, i)));
 				added = TRUE;
 			}
 
@@ -200,7 +212,7 @@ add_ip4_config (NMDnsDnsmasq *self, GVariantBuilder *servers, NMIP4Config *ip4,
 					add_dnsmasq_nameserver (self,
 					                        servers,
 					                        buf,
-					                        nm_ip4_config_get_domain (ip4, i));
+					                        clean_domain (nm_ip4_config_get_domain (ip4, i)));
 					added = TRUE;
 				}
 			}
@@ -303,7 +315,7 @@ add_ip6_config (NMDnsDnsmasq *self, GVariantBuilder *servers, NMIP6Config *ip6,
 				add_dnsmasq_nameserver (self,
 				                        servers,
 				                        buf,
-				                        nm_ip6_config_get_search (ip6, i));
+				                        clean_domain (nm_ip6_config_get_search (ip6, i)));
 				added = TRUE;
 			}
 
@@ -314,7 +326,7 @@ add_ip6_config (NMDnsDnsmasq *self, GVariantBuilder *servers, NMIP6Config *ip6,
 					add_dnsmasq_nameserver (self,
 					                        servers,
 					                        buf,
-					                        nm_ip6_config_get_domain (ip6, i));
+					                        clean_domain (nm_ip6_config_get_domain (ip6, i)));
 					added = TRUE;
 				}
 			}
