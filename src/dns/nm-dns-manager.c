@@ -210,6 +210,19 @@ nm_dns_ip_config_data_get_dns_priority (const NMDnsIPConfigData *config)
 		g_return_val_if_reached (0);
 }
 
+gboolean
+nm_dns_ip_config_data_get_dns_default (const NMDnsIPConfigData *config)
+{
+	g_return_val_if_fail (config, FALSE);
+
+	if (NM_IS_IP4_CONFIG (config->config))
+		return nm_ip4_config_get_dns_default (config->config);
+	else if (NM_IS_IP6_CONFIG (config->config))
+		return nm_ip6_config_get_dns_default (config->config);
+	else
+		g_return_val_if_reached (FALSE);
+}
+
 static NMDnsIPConfigData *
 ip_config_data_new (gpointer config, NMDnsIPConfigType type, const char *iface)
 {

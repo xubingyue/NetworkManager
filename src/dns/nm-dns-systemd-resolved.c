@@ -132,7 +132,7 @@ add_interface_configuration (NMDnsSystemdResolved *self,
 	}
 
 	if (!skip)
-		ic->configs = g_list_append (ic->configs, data->config);
+		ic->configs = g_list_append (ic->configs, (gpointer) data);
 }
 
 static void
@@ -155,6 +155,7 @@ add_ip4_dns (GVariantBuilder *dns, const NMIP4Config *config)
 
 static void
 add_ip6_dns (GVariantBuilder *dns, const NMIP6Config *config)
+
 {
 	guint i, n;
 
@@ -202,6 +203,8 @@ get_ip4_domains (GHashTable *domains, const NMIP4Config *config)
 		for (i = 0; i < n; i++)
 			add_domain (domains, nm_ip4_config_get_domain (config, i));
 	}
+	if (nm_ip4_config_get_dns_default (config))
+		add_domain (domains, "~.");
 }
 
 static void
@@ -218,6 +221,8 @@ get_ip6_domains (GHashTable *domains, const NMIP6Config *config)
 		for (i = 0; i < n; i++)
 			add_domain (domains, nm_ip6_config_get_domain (config, i));
 	}
+	if (nm_ip6_config_get_dns_default (config))
+		add_domain (domains, "~.");
 }
 
 static void
@@ -234,14 +239,16 @@ free_pending_updates (NMDnsSystemdResolved *self)
 }
 
 static void
-prepare_one_interface (NMDnsSystemdResolved *self, InterfaceConfig *ic)
+prepare_one_interface (NMDnsSystemdResolved *self, InterfaceConfig *ic, gboolean default_found)
 {
 	NMDnsSystemdResolvedPrivate *priv = NM_DNS_SYSTEMD_RESOLVED_GET_PRIVATE (self);
 	GVariantBuilder dns, domains;
 	gs_unref_hashtable GHashTable *ht = NULL;
+	NMDnsIPConfigData *data;
 	GHashTableIter iter;
 	const char *domain;
 	gpointer routing;
+	gboolean is_vpn = FALSE;
 	GList *l;
 
 	g_variant_builder_init (&dns, G_VARIANT_TYPE ("(ia(iay))"));
@@ -250,10 +257,11 @@ prepare_one_interface (NMDnsSystemdResolved *self, InterfaceConfig *ic)
 
 	/* Add DNS servers */
 	for (l = ic->configs ; l != NULL ; l = g_list_next (l)) {
-		if (NM_IS_IP4_CONFIG (l->data))
-			add_ip4_dns (&dns, l->data);
-		else if (NM_IS_IP6_CONFIG (l->data))
-			add_ip6_dns (&dns, l->data);
+		data = l->data;;
+		if (NM_IS_IP4_CONFIG (data->config))
+			add_ip4_dns (&dns, data->config);
+		else if (NM_IS_IP6_CONFIG (data->config))
+			add_ip6_dns (&dns, data->config);
 		else
 			g_assert_not_reached ();
 	}
@@ -262,13 +270,24 @@ prepare_one_interface (NMDnsSystemdResolved *self, InterfaceConfig *ic)
 	/* Add DNS domains */
 	ht = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, NULL);
 	for (l = ic->configs ; l != NULL ; l = g_list_next (l)) {
-		if (NM_IS_IP4_CONFIG (l->data))
-			get_ip4_domains (ht, l->data);
-		else if (NM_IS_IP6_CONFIG (l->data))
-			get_ip6_domains (ht, l->data);
+		data = l->data;;
+		if (NM_IS_IP4_CONFIG (data->config))
+			get_ip4_domains (ht, data->config);
+		else if (NM_IS_IP6_CONFIG (data->config))
+			get_ip6_domains (ht, data->config);
 		else
 			g_assert_not_reached ();
+
+		if (data->type == NM_DNS_IP_CONFIG_TYPE_VPN)
+			is_vpn = TRUE;
 	}
+
+	/* If there is no default DNS configuration, make all
+	 * default except VPNs with a search list
+	 */
+	if (!default_found && (!is_vpn || !g_hash_table_size (ht)))
+		add_domain (ht, "~.");
+
 	g_variant_builder_init (&domains, G_VARIANT_TYPE ("(ia(sb))"));
 	g_variant_builder_add (&domains, "i", ic->ifindex);
 	g_variant_builder_open (&domains, G_VARIANT_TYPE ("a(sb)"));
@@ -319,8 +338,16 @@ update (NMDnsPlugin *plugin,
 {
 	NMDnsSystemdResolved *self = NM_DNS_SYSTEMD_RESOLVED (plugin);
 	GArray *interfaces = g_array_new (TRUE, TRUE, sizeof (InterfaceConfig));
+	gboolean default_found = FALSE;
 	guint i;
 	int prio, first_prio = 0;
+
+	for (i = 0; i < configs->len; i++) {
+		if (nm_dns_ip_config_data_get_dns_default (configs->pdata[i])) {
+			default_found = TRUE;
+			break;
+		}
+	}
 
 	for (i = 0; i < configs->len; i++) {
 		gboolean skip = FALSE;
@@ -338,7 +365,7 @@ update (NMDnsPlugin *plugin,
 	for (i = 0; i < interfaces->len; i++) {
 		InterfaceConfig *ic = &g_array_index (interfaces, InterfaceConfig, i);
 
-		prepare_one_interface (self, ic);
+		prepare_one_interface (self, ic, default_found);
 		g_list_free (ic->configs);
 	}
 

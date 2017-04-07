@@ -45,6 +45,7 @@ typedef struct {
 } NMDnsIPConfigData;
 
 int nm_dns_ip_config_data_get_dns_priority (const NMDnsIPConfigData *config);
+gboolean nm_dns_ip_config_data_get_dns_default (const NMDnsIPConfigData *config);
 
 #define NM_TYPE_DNS_MANAGER (nm_dns_manager_get_type ())
 #define NM_DNS_MANAGER(o) (G_TYPE_CHECK_INSTANCE_CAST ((o), NM_TYPE_DNS_MANAGER, NMDnsManager))
