@@ -480,7 +480,8 @@ main (int argc, char *argv[])
 		                                          global_opt.dhcp4_clientid,
 		                                          45,
 		                                          NULL,
-		                                          global_opt.dhcp4_address);
+		                                          global_opt.dhcp4_address,
+		                                          FALSE);
 		g_assert (dhcp4_client);
 		g_signal_connect (dhcp4_client,
 		                  NM_DHCP_CLIENT_SIGNAL_STATE_CHANGED,

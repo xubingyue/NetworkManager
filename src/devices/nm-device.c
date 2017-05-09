@@ -5829,7 +5829,8 @@ dhcp4_start (NMDevice *self,
 	                                                nm_setting_ip4_config_get_dhcp_client_id (NM_SETTING_IP4_CONFIG (s_ip4)),
 	                                                dhcp4_get_timeout (self, NM_SETTING_IP4_CONFIG (s_ip4)),
 	                                                priv->dhcp_anycast_address,
-	                                                NULL);
+	                                                NULL,
+	                                                nm_setting_ip_config_get_never_default (s_ip4));
 
 	if (tmp)
 		g_byte_array_free (tmp, TRUE);

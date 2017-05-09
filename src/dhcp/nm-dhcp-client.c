@@ -55,6 +55,7 @@ NM_GOBJECT_PROPERTIES_DEFINE_BASE (
 	PROP_UUID,
 	PROP_PRIORITY,
 	PROP_TIMEOUT,
+	PROP_NEVER_DEFAULT,
 );
 
 typedef struct _NMDhcpClientPrivate {
@@ -69,6 +70,7 @@ typedef struct _NMDhcpClientPrivate {
 	GBytes *     client_id;
 	char *       hostname;
 	gboolean     use_fqdn;
+	gboolean     never_default;
 
 	NMDhcpState  state;
 	pid_t        pid;
@@ -774,6 +776,7 @@ nm_dhcp_client_handle_event (gpointer unused,
 				ip_config = (GObject *) nm_dhcp_utils_ip4_config_from_options (priv->ifindex,
 				                                                               priv->iface,
 				                                                               str_options,
+				                                                               priv->never_default,
 				                                                               priv->priority);
 			}
 		}
@@ -834,6 +837,9 @@ get_property (GObject *object, guint prop_id,
 	case PROP_TIMEOUT:
 		g_value_set_uint (value, priv->timeout);
 		break;
+	case PROP_NEVER_DEFAULT:
+		g_value_set_boolean (value, priv->never_default);
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
 		break;
@@ -874,6 +880,10 @@ set_property (GObject *object, guint prop_id,
 		break;
 	case PROP_TIMEOUT:
 		priv->timeout = g_value_get_uint (value);
+		break;
+	case PROP_NEVER_DEFAULT:
+		/* construct-only */
+		priv->never_default = g_value_get_boolean (value);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -981,6 +991,12 @@ nm_dhcp_client_class_init (NMDhcpClientClass *client_class)
 	                       0, G_MAXUINT, 45,
 	                       G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
 	                       G_PARAM_STATIC_STRINGS);
+
+	obj_properties[PROP_NEVER_DEFAULT] =
+	    g_param_spec_boolean (NM_DHCP_CLIENT_NEVER_DEFAULT, "", "",
+	                          FALSE,
+	                          G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
+	                          G_PARAM_STATIC_STRINGS);
 
 	g_object_class_install_properties (object_class, _PROPERTY_ENUMS_LAST, obj_properties);
 

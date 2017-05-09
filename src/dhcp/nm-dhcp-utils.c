@@ -386,6 +386,7 @@ NMIP4Config *
 nm_dhcp_utils_ip4_config_from_options (int ifindex,
                                        const char *iface,
                                        GHashTable *options,
+                                       gboolean never_default,
                                        guint32 priority)
 {
 	NMIP4Config *ip4_config = NULL;
@@ -465,11 +466,29 @@ nm_dhcp_utils_ip4_config_from_options (int ifindex,
 	str = g_hash_table_lookup (options, "dhcp_server_identifier");
 	if (str) {
 		if (inet_pton (AF_INET, str, &tmp_addr) > 0) {
+			gboolean add_route = FALSE;
 
 			_LOG2I (LOGD_DHCP4, iface, "  server identifier %s", str);
-			if (   nm_utils_ip4_address_clear_host_address(tmp_addr, address.plen) != nm_utils_ip4_address_clear_host_address(address.address, address.plen)
-			    && !nm_ip4_config_get_route_for_host (ip4_config, tmp_addr, TRUE)) {
-				/* DHCP server not on assigned subnet and the no direct route was returned. Add route */
+
+			if (nm_utils_ip4_address_clear_host_address (tmp_addr, address.plen) ==
+					nm_utils_ip4_address_clear_host_address (address.address, address.plen)) {
+				/* directly reachable, nothing to do */
+			} else if (gwaddr) {
+				if (never_default) {
+					/* we reach the server through a default route, but
+					 * never-default is set and thus the route won't be
+					 * installed
+					 */
+					add_route = TRUE;
+				}
+			} else if (nm_ip4_config_get_route_for_host (ip4_config, tmp_addr, FALSE)) {
+				/* indirectly reachable, nothing to do */
+			} else {
+				/* no route to server, add a direct one */
+				add_route = TRUE;
+			}
+
+			if (add_route) {
 				NMPlatformIP4Route route = { 0 };
 
 				route.network = tmp_addr;
