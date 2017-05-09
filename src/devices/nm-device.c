@@ -5565,7 +5565,7 @@ ip4_config_merge_and_apply (NMDevice *self,
 
 	has_direct_route = (   gateway == 0
 	                    || nm_ip4_config_destination_is_direct (composite, gateway, 32)
-	                    || nm_ip4_config_get_direct_route_for_host (composite, gateway));
+	                    || nm_ip4_config_get_route_for_host (composite, gateway, TRUE));
 
 	priv->default_route.v4_has = TRUE;
 	memset (&priv->default_route.v4, 0, sizeof (priv->default_route.v4));

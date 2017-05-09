@@ -468,7 +468,7 @@ nm_dhcp_utils_ip4_config_from_options (int ifindex,
 
 			_LOG2I (LOGD_DHCP4, iface, "  server identifier %s", str);
 			if (   nm_utils_ip4_address_clear_host_address(tmp_addr, address.plen) != nm_utils_ip4_address_clear_host_address(address.address, address.plen)
-			    && !nm_ip4_config_get_direct_route_for_host (ip4_config, tmp_addr)) {
+			    && !nm_ip4_config_get_route_for_host (ip4_config, tmp_addr, TRUE)) {
 				/* DHCP server not on assigned subnet and the no direct route was returned. Add route */
 				NMPlatformIP4Route route = { 0 };
 

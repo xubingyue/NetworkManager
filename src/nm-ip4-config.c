@@ -1678,7 +1678,7 @@ nm_ip4_config_get_route (const NMIP4Config *config, guint i)
 }
 
 const NMPlatformIP4Route *
-nm_ip4_config_get_direct_route_for_host (const NMIP4Config *config, guint32 host)
+nm_ip4_config_get_route_for_host (const NMIP4Config *config, guint32 host, gboolean direct_only)
 {
 	const NMIP4ConfigPrivate *priv = NM_IP4_CONFIG_GET_PRIVATE (config);
 	guint i;
@@ -1689,7 +1689,7 @@ nm_ip4_config_get_direct_route_for_host (const NMIP4Config *config, guint32 host
 	for (i = 0; i < priv->routes->len; i++) {
 		NMPlatformIP4Route *item = &g_array_index (priv->routes, NMPlatformIP4Route, i);
 
-		if (item->gateway != 0)
+		if (direct_only && item->gateway != 0)
 			continue;
 
 		if (best_route && best_route->plen > item->plen)
