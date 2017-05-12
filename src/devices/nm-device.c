@@ -5448,6 +5448,8 @@ ip4_config_merge_and_apply (NMDevice *self,
 	gboolean ignore_auto_dns = FALSE;
 	gboolean auto_method = FALSE;
 
+	_LOGD (LOGD_CORE, "merge and apply 4: commit %d, update pending %d", commit, priv->queued_ip4_config_id);
+
 	/* Merge all the configs into the composite config */
 	if (config) {
 		g_clear_object (&priv->dev_ip4_config);
@@ -5472,8 +5474,17 @@ ip4_config_merge_and_apply (NMDevice *self,
 	composite = nm_ip4_config_new (nm_device_get_ip_ifindex (self));
 	init_ip4_config_dns_priority (self, composite);
 
-	if (commit)
+	if (commit) {
 		ensure_con_ip4_config (self);
+
+		if (priv->queued_ip4_config_id) {
+			_LOGW (LOGD_CORE, "updating ext configuration");
+			g_clear_object (&priv->ext_ip4_config);
+			priv->ext_ip4_config = nm_ip4_config_capture (nm_device_get_platform (self),
+			                                              nm_device_get_ifindex (self),
+			                                              FALSE);
+		}
+	}
 
 	if (priv->dev_ip4_config) {
 		nm_ip4_config_merge (composite, priv->dev_ip4_config,
@@ -6179,6 +6190,8 @@ ip6_config_merge_and_apply (NMDevice *self,
 	gboolean auto_method = FALSE;
 	const char *token = NULL;
 
+	_LOGD (LOGD_CORE, "merge and apply 6: commit %d, update pending %d", commit, priv->queued_ip6_config_id);
+
 	/* Apply ignore-auto-routes and ignore-auto-dns settings */
 	connection = nm_device_get_applied_connection (self);
 	if (connection) {
@@ -6200,6 +6213,7 @@ ip6_config_merge_and_apply (NMDevice *self,
 		}
 	}
 
+
 	/* If no config was passed in, create a new one */
 	composite = nm_ip6_config_new (nm_device_get_ip_ifindex (self));
 	nm_ip6_config_set_privacy (composite,
@@ -6208,8 +6222,19 @@ ip6_config_merge_and_apply (NMDevice *self,
 	                           NM_SETTING_IP6_CONFIG_PRIVACY_UNKNOWN);
 	init_ip6_config_dns_priority (self, composite);
 
-	if (commit)
+	if (commit) {
 		ensure_con_ip6_config (self);
+		if (priv->queued_ip6_config_id) {
+			_LOGW (LOGD_CORE, "updating ext configuration");
+			g_clear_object (&priv->ext_ip6_config);
+			g_clear_object (&priv->ext_ip6_config_captured);
+			priv->ext_ip6_config_captured = nm_ip6_config_capture (nm_device_get_platform (self),
+			                                                       nm_device_get_ifindex (self),
+			                                                       FALSE,
+			                                                       NM_SETTING_IP6_CONFIG_PRIVACY_UNKNOWN);
+			priv->ext_ip6_config = nm_ip6_config_new_cloned (priv->ext_ip6_config_captured);
+		}
+	}
 
 	/* Merge all the IP configs into the composite config */
 	if (priv->ac_ip6_config) {
@@ -10576,6 +10601,8 @@ update_ip4_config (NMDevice *self, gboolean initial)
 	int ifindex;
 	gboolean capture_resolv_conf;
 
+	_LOGD (LOGD_CORE, "update ip4 config");
+
 	/* If a commit is scheduled, this function would potentially interfere with
 	 * it changing IP configurations before they are applied. Postpone the
 	 * update in such case.
@@ -10586,7 +10613,7 @@ update_ip4_config (NMDevice *self, gboolean initial)
 	                                       AF_INET)) {
 		priv->queued_ip4_config_pending = FALSE;
 		priv->queued_ip4_config_id = g_idle_add (queued_ip4_config_change, self);
-		_LOGT (LOGD_DEVICE, "IP4 update was postponed");
+		_LOGD (LOGD_DEVICE, "IP4 update was postponed");
 		return;
 	}
 
@@ -10669,6 +10696,8 @@ update_ip6_config (NMDevice *self, gboolean initial)
 	int ifindex;
 	gboolean capture_resolv_conf;
 
+	_LOGD (LOGD_CORE, "update ip6 config");
+
 	/* If a commit is scheduled, this function would potentially interfere with
 	 * it changing IP configurations before they are applied. Postpone the
 	 * update in such case.
@@ -10679,7 +10708,7 @@ update_ip6_config (NMDevice *self, gboolean initial)
 	                                       AF_INET6)) {
 		priv->queued_ip6_config_pending = FALSE;
 		priv->queued_ip6_config_id = g_idle_add (queued_ip6_config_change, self);
-		_LOGT (LOGD_DEVICE, "IP6 update was postponed");
+		_LOGD (LOGD_DEVICE, "IP6 update was postponed");
 		return;
 	}
 
