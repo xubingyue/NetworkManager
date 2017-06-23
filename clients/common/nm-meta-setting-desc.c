@@ -5361,6 +5361,9 @@ static const NMMetaPropertyInfo *const property_infos_IP4_CONFIG[] = {
 			.remove_fcn =               _remove_fcn_ipv4_config_dns_search,
 		),
 	),
+	PROPERTY_INFO (NM_SETTING_IP_CONFIG_DNS_DEFAULT, DESCRIBE_DOC_NM_SETTING_IP4_CONFIG_DNS_DEFAULT,
+		.property_type =                &_pt_gobject_bool,
+	),
 	PROPERTY_INFO (NM_SETTING_IP_CONFIG_DNS_OPTIONS, DESCRIBE_DOC_NM_SETTING_IP4_CONFIG_DNS_OPTIONS,
 		.property_type = DEFINE_PROPERTY_TYPE (
 			.get_fcn =                  _get_fcn_nmc_with_default,
@@ -5487,6 +5490,9 @@ static const NMMetaPropertyInfo *const property_infos_IP6_CONFIG[] = {
 			.set_fcn =                  _set_fcn_ip6_config_dns_search,
 			.remove_fcn =               _remove_fcn_ipv6_config_dns_search,
 		),
+	),
+	PROPERTY_INFO (NM_SETTING_IP_CONFIG_DNS_DEFAULT, DESCRIBE_DOC_NM_SETTING_IP6_CONFIG_DNS_DEFAULT,
+		.property_type =                &_pt_gobject_bool,
 	),
 	PROPERTY_INFO (NM_SETTING_IP_CONFIG_DNS_OPTIONS, DESCRIBE_DOC_NM_SETTING_IP6_CONFIG_DNS_OPTIONS,
 		.property_type = DEFINE_PROPERTY_TYPE (

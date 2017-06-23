@@ -1344,6 +1344,7 @@ typedef struct {
 	GPtrArray *dns;        /* array of IP address strings */
 	GPtrArray *dns_search; /* array of domain name strings */
 	GPtrArray *dns_options;/* array of DNS options */
+	gboolean dns_default;
 	gint dns_priority;
 	GPtrArray *addresses;  /* array of NMIPAddress */
 	GPtrArray *routes;     /* array of NMIPRoute */
@@ -1364,6 +1365,7 @@ enum {
 	PROP_METHOD,
 	PROP_DNS,
 	PROP_DNS_SEARCH,
+	PROP_DNS_DEFAULT,
 	PROP_DNS_OPTIONS,
 	PROP_DNS_PRIORITY,
 	PROP_ADDRESSES,
@@ -1680,6 +1682,26 @@ nm_setting_ip_config_clear_dns_searches (NMSettingIPConfig *setting)
 	priv = NM_SETTING_IP_CONFIG_GET_PRIVATE (setting);
 	g_ptr_array_set_size (priv->dns_search, 0);
 	g_object_notify (G_OBJECT (setting), NM_SETTING_IP_CONFIG_DNS_SEARCH);
+}
+
+/**
+ * nm_setting_ip_config_get_dns_default:
+ * @setting: the #NMSettingIPConfig
+ *
+ * Returns the value contained in the #NMSettingIPConfig:dns-default
+ * property.
+ *
+ * Returns: %TRUE if this connection is the default for DNS queries, %FALSE
+ *   otherwise
+ *
+ * Since: 1.10
+ **/
+gboolean
+nm_setting_ip_config_get_dns_default (NMSettingIPConfig *setting)
+{
+	g_return_val_if_fail (NM_IS_SETTING_IP_CONFIG (setting), FALSE);
+
+	return NM_SETTING_IP_CONFIG_GET_PRIVATE (setting)->dns_default;
 }
 
 /**
@@ -2627,6 +2649,9 @@ set_property (GObject *object, guint prop_id,
 		g_ptr_array_unref (priv->dns_search);
 		priv->dns_search = _nm_utils_strv_to_ptrarray (g_value_get_boxed (value));
 		break;
+	case PROP_DNS_DEFAULT:
+		priv->dns_default = g_value_get_boolean (value);
+		break;
 	case PROP_DNS_OPTIONS:
 		strv = g_value_get_boxed (value);
 		if (!strv) {
@@ -2717,6 +2742,9 @@ get_property (GObject *object, guint prop_id,
 		break;
 	case PROP_DNS_SEARCH:
 		g_value_take_boxed (value, _nm_utils_ptrarray_to_strv (priv->dns_search));
+		break;
+	case PROP_DNS_DEFAULT:
+		g_value_set_boolean (value, priv->dns_default);
 		break;
 	case PROP_DNS_OPTIONS:
 		g_value_take_boxed (value, priv->dns_options ? _nm_utils_ptrarray_to_strv (priv->dns_options) : NULL);
@@ -2857,6 +2885,25 @@ nm_setting_ip_config_class_init (NMSettingIPConfigClass *setting_class)
 		                     G_TYPE_STRV,
 		                     G_PARAM_READWRITE |
 		                     G_PARAM_STATIC_STRINGS));
+
+	/**
+	 * NMSettingIPConfig:dns-default:
+	 *
+	 * When this property is set to %TRUE, any DNS query not matching a
+	 * specific search domain provided by another connection is directed to
+	 * name servers specified by this connection. When set to %FALSE, such
+	 * queries are sent through all connections, excluding VPNs that provide
+	 * a search list.
+	 *
+	 * Since: 1.10
+	 **/
+	g_object_class_install_property
+		(object_class, PROP_DNS_DEFAULT,
+		 g_param_spec_boolean (NM_SETTING_IP_CONFIG_DNS_DEFAULT, "", "",
+		                       FALSE,
+		                       G_PARAM_READWRITE |
+		                       G_PARAM_CONSTRUCT |
+		                       G_PARAM_STATIC_STRINGS));
 
 	/**
 	 * NMSettingIPConfig:dns-options:

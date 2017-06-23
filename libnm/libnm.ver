@@ -1180,6 +1180,7 @@ global:
 
 libnm_1_10_0 {
 global:
+	nm_setting_ip_config_get_dns_default;
 	nm_setting_wireless_security_get_pmf;
 	nm_setting_wireless_security_get_wps_method;
 	nm_setting_wireless_security_pmf_get_type;
