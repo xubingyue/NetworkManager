@@ -51,6 +51,7 @@ typedef struct {
 	GPtrArray *domains;
 	GPtrArray *searches;
 	GPtrArray *dns_options;
+	gboolean dns_default;
 	GVariant *address_data_variant;
 	GVariant *addresses_variant;
 } NMIP6ConfigPrivate;
@@ -80,6 +81,7 @@ NM_GOBJECT_PROPERTIES_DEFINE (NMIP6Config,
 	PROP_SEARCHES,
 	PROP_DNS_OPTIONS,
 	PROP_DNS_PRIORITY,
+	PROP_DNS_DEFAULT,
 );
 
 /*****************************************************************************/
@@ -566,6 +568,9 @@ nm_ip6_config_merge_setting (NMIP6Config *config, NMSettingIPConfig *setting, gu
 	for (i = 0; i < nsearches; i++)
 		nm_ip6_config_add_search (config, nm_setting_ip_config_get_dns_search (setting, i));
 
+	if (nm_setting_ip_config_get_dns_default (setting))
+		nm_ip6_config_set_dns_default (config, TRUE);
+
 	i = 0;
 	while ((i = nm_setting_ip_config_next_valid_dns_option (setting, i)) >= 0) {
 		nm_ip6_config_add_dns_option (config, nm_setting_ip_config_get_dns_option (setting, i));
@@ -695,6 +700,8 @@ nm_ip6_config_create_setting (const NMIP6Config *config)
 	g_object_set (s_ip6,
 	              NM_SETTING_IP_CONFIG_DNS_PRIORITY,
 	              nm_ip6_config_get_dns_priority (config),
+	              NM_SETTING_IP_CONFIG_DNS_DEFAULT,
+	              nm_ip6_config_get_dns_default (config),
 	              NULL);
 
 	return NM_SETTING (s_ip6);
@@ -753,6 +760,11 @@ nm_ip6_config_merge (NMIP6Config *dst, const NMIP6Config *src, NMIPConfigMergeFl
 		for (i = 0; i < nm_ip6_config_get_num_searches (src); i++)
 			nm_ip6_config_add_search (dst, nm_ip6_config_get_search (src, i));
 	}
+
+	/* dns default */
+	if (   !NM_FLAGS_HAS (merge_flags, NM_IP_CONFIG_MERGE_NO_DNS)
+	    && src_priv->dns_default)
+		nm_ip6_config_set_dns_default (dst, TRUE);
 
 	/* dns options */
 	if (!NM_FLAGS_HAS (merge_flags, NM_IP_CONFIG_MERGE_NO_DNS)) {
@@ -1186,6 +1198,12 @@ nm_ip6_config_replace (NMIP6Config *dst, const NMIP6Config *src, gboolean *relev
 		has_relevant_changes = TRUE;
 	}
 
+	/* dns default */
+	if (nm_ip6_config_get_dns_default (src) != nm_ip6_config_get_dns_default (dst)) {
+		nm_ip6_config_set_dns_default (dst, nm_ip6_config_get_dns_default (src));
+		has_relevant_changes = TRUE;
+	}
+
 	/* dns options */
 	num = nm_ip6_config_get_num_dns_options (src);
 	are_equal = num == nm_ip6_config_get_num_dns_options (dst);
@@ -1283,6 +1301,7 @@ nm_ip6_config_dump (const NMIP6Config *config, const char *detail)
 		g_message (" dnsopt: %s", nm_ip6_config_get_dns_option (config, i));
 
 	g_message (" dnspri: %d", nm_ip6_config_get_dns_priority (config));
+	g_message (" dnsdef: %d", nm_ip6_config_get_dns_default (config));
 
 	g_message ("    mss: %"G_GUINT32_FORMAT, nm_ip6_config_get_mss (config));
 	g_message (" n-dflt: %d", nm_ip6_config_get_never_default (config));
@@ -1916,6 +1935,27 @@ nm_ip6_config_get_dns_priority (const NMIP6Config *config)
 /*****************************************************************************/
 
 void
+nm_ip6_config_set_dns_default (NMIP6Config *config, gboolean is_default)
+{
+	NMIP6ConfigPrivate *priv = NM_IP6_CONFIG_GET_PRIVATE (config);
+
+	if (is_default != priv->dns_default) {
+		priv->dns_default = is_default;
+		_notify (config, PROP_DNS_DEFAULT);
+	}
+}
+
+gboolean
+nm_ip6_config_get_dns_default (const NMIP6Config *config)
+{
+	const NMIP6ConfigPrivate *priv = NM_IP6_CONFIG_GET_PRIVATE (config);
+
+	return priv->dns_default;
+}
+
+/*****************************************************************************/
+
+void
 nm_ip6_config_set_mss (NMIP6Config *config, guint32 mss)
 {
 	NMIP6ConfigPrivate *priv = NM_IP6_CONFIG_GET_PRIVATE (config);
@@ -2213,6 +2253,9 @@ return_cached:
 	case PROP_DNS_PRIORITY:
 		g_value_set_int (value, priv->dns_priority);
 		break;
+	case PROP_DNS_DEFAULT:
+		g_value_set_boolean (value, priv->dns_default);
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
 		break;
@@ -2367,6 +2410,11 @@ nm_ip6_config_class_init (NMIP6ConfigClass *config_class)
 	                      G_MININT32, G_MAXINT32, 0,
 	                      G_PARAM_READABLE |
 	                      G_PARAM_STATIC_STRINGS);
+	obj_properties[PROP_DNS_DEFAULT] =
+	    g_param_spec_boolean (NM_IP6_CONFIG_DNS_DEFAULT, "", "",
+	                          FALSE,
+	                          G_PARAM_READABLE |
+	                          G_PARAM_STATIC_STRINGS);
 
 	g_object_class_install_properties (object_class, _PROPERTY_ENUMS_LAST, obj_properties);
 

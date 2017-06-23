@@ -47,6 +47,7 @@ typedef struct _NMIP6ConfigClass NMIP6ConfigClass;
 #define NM_IP6_CONFIG_SEARCHES "searches"
 #define NM_IP6_CONFIG_DNS_OPTIONS "dns-options"
 #define NM_IP6_CONFIG_DNS_PRIORITY "dns-priority"
+#define NM_IP6_CONFIG_DNS_DEFAULT "dns-default"
 
 /* deprecated */
 #define NM_IP6_CONFIG_ADDRESSES "addresses"
@@ -131,6 +132,9 @@ const char * nm_ip6_config_get_dns_option (const NMIP6Config *config, guint i);
 
 void nm_ip6_config_set_dns_priority (NMIP6Config *config, gint priority);
 gint nm_ip6_config_get_dns_priority (const NMIP6Config *config);
+
+void nm_ip6_config_set_dns_default (NMIP6Config *config, gboolean is_default);
+gboolean nm_ip6_config_get_dns_default (const NMIP6Config *config);
 
 void nm_ip6_config_set_mss (NMIP6Config *config, guint32 mss);
 guint32 nm_ip6_config_get_mss (const NMIP6Config *config);

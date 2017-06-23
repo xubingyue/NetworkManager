@@ -45,6 +45,7 @@ typedef struct _NMIP4ConfigClass NMIP4ConfigClass;
 #define NM_IP4_CONFIG_SEARCHES "searches"
 #define NM_IP4_CONFIG_DNS_OPTIONS "dns-options"
 #define NM_IP4_CONFIG_DNS_PRIORITY "dns-priority"
+#define NM_IP4_CONFIG_DNS_DEFAULT "dns-default"
 #define NM_IP4_CONFIG_WINS_SERVERS "wins-servers"
 
 /* deprecated */
@@ -122,6 +123,9 @@ const char * nm_ip4_config_get_dns_option (const NMIP4Config *config, guint i);
 
 void nm_ip4_config_set_dns_priority (NMIP4Config *config, gint priority);
 gint nm_ip4_config_get_dns_priority (const NMIP4Config *config);
+
+void nm_ip4_config_set_dns_default (NMIP4Config *config, gboolean is_default);
+gboolean nm_ip4_config_get_dns_default (const NMIP4Config *config);
 
 void nm_ip4_config_set_mss (NMIP4Config *config, guint32 mss);
 guint32 nm_ip4_config_get_mss (const NMIP4Config *config);
