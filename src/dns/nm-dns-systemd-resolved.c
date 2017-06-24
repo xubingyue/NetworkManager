@@ -136,56 +136,7 @@ add_interface_configuration (NMDnsSystemdResolved *self,
 }
 
 static void
-add_domain (GVariantBuilder *domains, const char *domain)
-{
-	gboolean routing = FALSE;
-
-	if (domain[0] == '~') {
-		routing = TRUE;
-		domain++;
-	}
-
-	g_variant_builder_add (domains, "(sb)", domain, routing);
-}
-
-static void
-update_add_ip6_config (NMDnsSystemdResolved *self,
-                       GVariantBuilder *dns,
-                       GVariantBuilder *domains,
-                       const NMIP6Config *config)
-{
-	guint i, n;
-
-	n = nm_ip6_config_get_num_nameservers (config);
-	for (i = 0 ; i < n; i++) {
-		const struct in6_addr *ip;
-
-		g_variant_builder_open (dns, G_VARIANT_TYPE ("(iay)"));
-		g_variant_builder_add (dns, "i", AF_INET6);
-		ip = nm_ip6_config_get_nameserver (config, i),
-
-		g_variant_builder_add_value (dns, g_variant_new_fixed_array (G_VARIANT_TYPE_BYTE, ip, 16, 1));
-		g_variant_builder_close (dns);
-	}
-
-	n = nm_ip6_config_get_num_searches (config);
-	if (n > 0) {
-		for (i = 0; i < n; i++) {
-			add_domain (domains, nm_ip6_config_get_search (config, i));
-		}
-	} else {
-		n = nm_ip6_config_get_num_domains (config);
-		for (i = 0; i < n; i++) {
-			add_domain (domains, nm_ip6_config_get_domain (config, i));
-		}
-	}
-}
-
-static void
-update_add_ip4_config (NMDnsSystemdResolved *self,
-                       GVariantBuilder *dns,
-                       GVariantBuilder *domains,
-                       const NMIP4Config *config)
+add_ip4_dns (GVariantBuilder *dns, const NMIP4Config *config)
 {
 	guint i, n;
 
@@ -200,17 +151,72 @@ update_add_ip4_config (NMDnsSystemdResolved *self,
 		g_variant_builder_add_value (dns, g_variant_new_fixed_array (G_VARIANT_TYPE_BYTE, &ns, 4, 1));
 		g_variant_builder_close (dns);
 	}
+}
+
+static void
+add_ip6_dns (GVariantBuilder *dns, const NMIP6Config *config)
+{
+	guint i, n;
+
+	n = nm_ip6_config_get_num_nameservers (config);
+	for (i = 0 ; i < n; i++) {
+		const struct in6_addr *ip;
+
+		g_variant_builder_open (dns, G_VARIANT_TYPE ("(iay)"));
+		g_variant_builder_add (dns, "i", AF_INET6);
+		ip = nm_ip6_config_get_nameserver (config, i),
+
+		g_variant_builder_add_value (dns, g_variant_new_fixed_array (G_VARIANT_TYPE_BYTE, ip, 16, 1));
+		g_variant_builder_close (dns);
+	}
+}
+
+static void
+add_domain (GHashTable *domains, const char *domain)
+{
+	gboolean routing = FALSE;
+	gpointer routing_old;
+
+	if (domain[0] == '~') {
+		routing = TRUE;
+		domain++;
+	}
+
+	if (   !g_hash_table_lookup_extended (domains, domain, NULL, &routing_old)
+	    || routing < GPOINTER_TO_INT (routing_old)) /* promote routing-only to search domain,
+	                                                   not the other way around */
+		g_hash_table_insert (domains, (gpointer) domain, GINT_TO_POINTER (routing));
+}
+
+static void
+get_ip4_domains (GHashTable *domains, const NMIP4Config *config)
+{
+	guint i, n;
 
 	n = nm_ip4_config_get_num_searches (config);
 	if (n  > 0) {
-		for (i = 0; i < n; i++) {
+		for (i = 0; i < n; i++)
 			add_domain (domains, nm_ip4_config_get_search (config, i));
-		}
 	} else {
 		n = nm_ip4_config_get_num_domains (config);
-		for (i = 0; i < n; i++) {
+		for (i = 0; i < n; i++)
 			add_domain (domains, nm_ip4_config_get_domain (config, i));
-		}
+	}
+}
+
+static void
+get_ip6_domains (GHashTable *domains, const NMIP6Config *config)
+{
+	guint i, n;
+
+	n = nm_ip6_config_get_num_searches (config);
+	if (n  > 0) {
+		for (i = 0; i < n; i++)
+			add_domain (domains, nm_ip6_config_get_search (config, i));
+	} else {
+		n = nm_ip6_config_get_num_domains (config);
+		for (i = 0; i < n; i++)
+			add_domain (domains, nm_ip6_config_get_domain (config, i));
 	}
 }
 
@@ -232,25 +238,43 @@ prepare_one_interface (NMDnsSystemdResolved *self, InterfaceConfig *ic)
 {
 	NMDnsSystemdResolvedPrivate *priv = NM_DNS_SYSTEMD_RESOLVED_GET_PRIVATE (self);
 	GVariantBuilder dns, domains;
+	gs_unref_hashtable GHashTable *ht = NULL;
+	GHashTableIter iter;
+	const char *domain;
+	gpointer routing;
 	GList *l;
 
 	g_variant_builder_init (&dns, G_VARIANT_TYPE ("(ia(iay))"));
 	g_variant_builder_add (&dns, "i", ic->ifindex);
 	g_variant_builder_open (&dns, G_VARIANT_TYPE ("a(iay)"));
 
-	g_variant_builder_init (&domains, G_VARIANT_TYPE ("(ia(sb))"));
-	g_variant_builder_add (&domains, "i", ic->ifindex);
-	g_variant_builder_open (&domains, G_VARIANT_TYPE ("a(sb)"));
-
+	/* Add DNS servers */
 	for (l = ic->configs ; l != NULL ; l = g_list_next (l)) {
 		if (NM_IS_IP4_CONFIG (l->data))
-			update_add_ip4_config (self, &dns, &domains, l->data);
+			add_ip4_dns (&dns, l->data);
 		else if (NM_IS_IP6_CONFIG (l->data))
-			update_add_ip6_config (self, &dns, &domains, l->data);
+			add_ip6_dns (&dns, l->data);
 		else
 			g_assert_not_reached ();
 	}
 	g_variant_builder_close (&dns);
+
+	/* Add DNS domains */
+	ht = g_hash_table_new_full (g_str_hash, g_str_equal, NULL, NULL);
+	for (l = ic->configs ; l != NULL ; l = g_list_next (l)) {
+		if (NM_IS_IP4_CONFIG (l->data))
+			get_ip4_domains (ht, l->data);
+		else if (NM_IS_IP6_CONFIG (l->data))
+			get_ip6_domains (ht, l->data);
+		else
+			g_assert_not_reached ();
+	}
+	g_variant_builder_init (&domains, G_VARIANT_TYPE ("(ia(sb))"));
+	g_variant_builder_add (&domains, "i", ic->ifindex);
+	g_variant_builder_open (&domains, G_VARIANT_TYPE ("a(sb)"));
+	g_hash_table_iter_init (&iter, ht);
+	while (g_hash_table_iter_next (&iter, (gpointer *) &domain, &routing))
+		g_variant_builder_add (&domains, "(sb)", domain, GPOINTER_TO_INT (routing));
 	g_variant_builder_close (&domains);
 
 	g_queue_push_tail (&priv->dns_updates,
