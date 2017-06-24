@@ -1348,6 +1348,12 @@ make_ip4_setting (shvarFile *ifcfg,
 		g_free (value);
 	}
 
+	/* DNS default */
+	g_object_set (s_ip4,
+	              NM_SETTING_IP_CONFIG_DNS_DEFAULT,
+	              svGetValueBoolean (ifcfg, "DNS_DEFAULT", FALSE),
+	              NULL);
+
 	/* DNS options */
 	parse_dns_options (s_ip4, svGetValue (ifcfg, "RES_OPTIONS", &value));
 	parse_dns_options (s_ip4, dns_options);
@@ -1808,6 +1814,12 @@ make_ip6_setting (shvarFile *ifcfg,
 
 		g_free (route6_path);
 	}
+
+	/* DNS default */
+	g_object_set (s_ip6,
+	              NM_SETTING_IP_CONFIG_DNS_DEFAULT,
+	              svGetValueBoolean (ifcfg, "IPV6_DNS_DEFAULT", FALSE),
+	              NULL);
 
 	/* DNS options */
 	parse_dns_options (s_ip6, svGetValue (ifcfg, "RES_OPTIONS", &value));

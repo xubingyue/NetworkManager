@@ -556,6 +556,19 @@ nm_setting_ip6_config_class_init (NMSettingIP6ConfigClass *ip6_class)
 	 * ---end---
 	 */
 
+	/* ---ifcfg-rh---
+	 * property: dns-default
+	 * variable: IPV6_DNS_DEFAULT
+	 * format: boolean
+	 * default: no
+	 * description: IPV6_DNS_DEFAULT=yes tells NetworkManager that any DNS
+	 *   query not matching a specific search domain provided by another
+	 *   connection should be directed to name servers specified by this
+	 *   connection
+	 * example: IPV6_DNS_DEFAULT=yes
+	 * ---end---
+	 */
+
 	/* ---keyfile---
 	 * property: addresses
 	 * variable: address1, address2, ...

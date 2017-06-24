@@ -2332,6 +2332,11 @@ write_ip4_setting (NMConnection *connection, shvarFile *ifcfg, GError **error)
 	else
 		svUnsetValue (ifcfg, "IPV4_DNS_PRIORITY");
 
+	if (nm_setting_ip_config_get_dns_default (s_ip4))
+		svSetValueBoolean (ifcfg, "DNS_DEFAULT", TRUE);
+	else
+		svUnsetValue (ifcfg, "DNS_DEFAULT");
+
 	return TRUE;
 }
 
@@ -2669,6 +2674,11 @@ write_ip6_setting (NMConnection *connection, shvarFile *ifcfg, GError **error)
 		svSetValueInt64 (ifcfg, "IPV6_DNS_PRIORITY", priority);
 	else
 		svUnsetValue (ifcfg, "IPV6_DNS_PRIORITY");
+
+	if (nm_setting_ip_config_get_dns_default (s_ip6))
+		svSetValueBoolean (ifcfg, "IPV6_DNS_DEFAULT", TRUE);
+	else
+		svUnsetValue (ifcfg, "IPV6_DNS_DEFAULT");
 
 	/* Static routes go to route6-<dev> file */
 	route6_path = utils_get_route6_path (svFileGetName (ifcfg));

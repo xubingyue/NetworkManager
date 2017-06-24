@@ -575,6 +575,18 @@ nm_setting_ip4_config_class_init (NMSettingIP4ConfigClass *ip4_class)
 	 * ---end---
 	 */
 
+	/* ---ifcfg-rh---
+	 * property: dns-default
+	 * variable: DNS_DEFAULT
+	 * format: boolean
+	 * default: no
+	 * description: DNS_DEFAULT=yes tells NetworkManager that any DNS query
+	 *   not matching a specific search domain provided by another connection
+	 *   should be directed to name servers specified by this connection
+	 * example: DNS_DEFAULT=yes
+	 * ---end---
+	 */
+
 	/* ---keyfile---
 	 * property: addresses
 	 * variable: address1, address2, ...
