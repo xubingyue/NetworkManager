@@ -68,6 +68,7 @@ struct NMDnsEntry {
 	char **domains;
 	int priority;
 	gboolean vpn;
+	gboolean is_default;
 };
 
 /**
@@ -82,7 +83,8 @@ nm_dns_entry_new (const char *interface,
                   const char * const *nameservers,
                   const char * const *domains,
                   int priority,
-                  gboolean vpn)
+                  gboolean vpn,
+                  gboolean is_default)
 {
 	NMDnsEntry *entry;
 	guint i, len;
@@ -108,6 +110,7 @@ nm_dns_entry_new (const char *interface,
 
 	entry->priority = priority;
 	entry->vpn = vpn;
+	entry->is_default = is_default;
 
 	return entry;
 }
@@ -132,7 +135,8 @@ nm_dns_entry_dup (NMDnsEntry *entry)
 	                         (const char * const *) entry->nameservers,
 	                         (const char * const *) entry->domains,
 	                         entry->priority,
-	                         entry->vpn);
+	                         entry->vpn,
+	                         entry->is_default);
 
 	return copy;
 }
@@ -238,6 +242,25 @@ nm_dns_entry_get_vpn (NMDnsEntry *entry)
 }
 
 /**
+ * nm_dns_entry_get_default:
+ * @entry: the #NMDnsEntry
+ *
+ * Gets whether the entry is the default one.
+ *
+ * Returns: %TRUE if the entry is the default one
+ *
+ * Since: 1.10
+ **/
+gboolean
+nm_dns_entry_get_default (NMDnsEntry *entry)
+{
+	g_return_val_if_fail (entry, 0);
+	g_return_val_if_fail (entry->refcount > 0, 0);
+
+	return entry->is_default;
+}
+
+/**
  * nm_dns_entry_get_priority:
  * @entry: the #NMDnsEntry
  *
@@ -275,7 +298,7 @@ demarshal_dns_configuration (NMObject *object, GParamSpec *pspec, GVariant *valu
 
 	while (g_variant_iter_next (&iter, "@a{sv}", &entry_var)) {
 		char **nameservers = NULL, **domains = NULL;
-		gboolean vpn = FALSE;
+		gboolean vpn = FALSE, is_default = FALSE;
 		char *interface = NULL, *str;
 		gint priority;
 
@@ -305,12 +328,14 @@ demarshal_dns_configuration (NMObject *object, GParamSpec *pspec, GVariant *valu
 		g_variant_lookup (entry_var, "interface", "&s", &interface);
 		g_variant_lookup (entry_var, "priority", "i", &priority);
 		g_variant_lookup (entry_var, "vpn", "b", &vpn);
+		g_variant_lookup (entry_var, "default", "b", &is_default);
 
 		entry = nm_dns_entry_new (interface,
 		                          (const char * const *) nameservers,
 		                          (const char * const *) domains,
 		                          priority,
-		                          vpn);
+		                          vpn,
+		                          is_default);
 		g_free (domains);
 		g_free (nameservers);
 		g_variant_unref (entry_var);

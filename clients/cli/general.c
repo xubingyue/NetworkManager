@@ -1378,7 +1378,11 @@ do_overview (NmCli *nmc, int argc, char **argv)
 
 		if (nm_dns_entry_get_vpn (dns))
 			g_print ("\ttype: vpn\n");
+
+		if (nm_dns_entry_get_default (dns))
+			g_print ("\tdefault: yes\n");
 		g_print ("\n");
+
 	}
 
 	g_print (_("Use \"nmcli device show\" to get complete information about known devices and\n"

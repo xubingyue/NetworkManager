@@ -46,6 +46,9 @@ def handle_config(config):
         if entry.get_vpn():
             print "   vpn: yes"
 
+        if entry.get_default():
+            print "   default: yes"
+
         print ""
 
 def dns_config_changed(self, property):

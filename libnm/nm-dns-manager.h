@@ -66,7 +66,8 @@ NMDnsEntry *       nm_dns_entry_new (const char *interface,
                                      const char * const *nameservers,
                                      const char * const *domains,
                                      int priority,
-                                     gboolean vpn);
+                                     gboolean vpn,
+                                     gboolean is_default);
 NMDnsEntry *        nm_dns_entry_dup (NMDnsEntry *entry);
 
 #endif /* __NM_DNS_MANAGER_H__ */

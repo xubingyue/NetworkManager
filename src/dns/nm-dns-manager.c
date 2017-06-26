@@ -1961,6 +1961,7 @@ _get_config_variant (NMDnsManager *self)
 		GVariantBuilder strv_builder;
 		gboolean v4 = NM_IS_IP4_CONFIG (current->config);
 		gint priority;
+		gboolean is_default;
 
 		if (v4) {
 			NMIP4Config *config = NM_IP4_CONFIG (current->config);
@@ -2008,6 +2009,7 @@ _get_config_variant (NMDnsManager *self)
 			}
 
 			priority = nm_ip4_config_get_dns_priority (config);
+			is_default = nm_ip4_config_get_dns_default (config);
 		} else {
 			NMIP6Config *config = NM_IP6_CONFIG (current->config);
 			guint num = nm_ip6_config_get_num_nameservers (config);
@@ -2054,6 +2056,7 @@ _get_config_variant (NMDnsManager *self)
 			}
 
 			priority = nm_ip6_config_get_dns_priority (config);
+			is_default = nm_ip6_config_get_dns_default (config);
 		}
 
 		/* Add device */
@@ -2075,6 +2078,12 @@ _get_config_variant (NMDnsManager *self)
 		                       "{sv}",
 		                       "vpn",
 		                       g_variant_new_boolean (current->type == NM_DNS_IP_CONFIG_TYPE_VPN));
+
+		/* Add default */
+		g_variant_builder_add (&entry_builder,
+		                       "{sv}",
+		                       "default",
+		                       g_variant_new_boolean (is_default));
 
 		g_variant_builder_add (&builder, "a{sv}", &entry_builder);
 	}

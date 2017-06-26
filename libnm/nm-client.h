@@ -190,6 +190,9 @@ NM_AVAILABLE_IN_1_6
 int                 nm_dns_entry_get_priority (NMDnsEntry *entry);
 NM_AVAILABLE_IN_1_6
 gboolean            nm_dns_entry_get_vpn (NMDnsEntry *entry);
+NM_AVAILABLE_IN_1_10
+gboolean            nm_dns_entry_get_default (NMDnsEntry *entry);
+
 
 /**
  * NMClient:
