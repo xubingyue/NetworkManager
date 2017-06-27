@@ -1107,7 +1107,6 @@ global:
 	nm_device_macsec_get_validation;
 	nm_device_macsec_get_window;
 	nm_dns_entry_get_domains;
-	nm_dns_entry_get_default;
 	nm_dns_entry_get_interface;
 	nm_dns_entry_get_nameservers;
 	nm_dns_entry_get_priority;
@@ -1181,6 +1180,7 @@ global:
 
 libnm_1_10_0 {
 global:
+	nm_dns_entry_get_default;
 	nm_setting_ip_config_get_dns_default;
 	nm_setting_wireless_security_get_pmf;
 	nm_setting_wireless_security_get_wps_method;
