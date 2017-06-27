@@ -155,7 +155,6 @@ add_ip4_dns (GVariantBuilder *dns, const NMIP4Config *config)
 
 static void
 add_ip6_dns (GVariantBuilder *dns, const NMIP6Config *config)
-
 {
 	guint i, n;
 
