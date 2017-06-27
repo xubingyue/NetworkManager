@@ -341,7 +341,7 @@ add_ip4_domains (GPtrArray *array, NMIP4Config *src, gboolean dup,
 static void
 merge_one_ip4_config (NMResolvConfData *rc, NMIP4Config *src)
 {
-	guint32 num, i;
+	guint num, i;
 
 	num = nm_ip4_config_get_num_nameservers (src);
 	for (i = 0; i < num; i++) {
