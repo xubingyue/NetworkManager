@@ -207,23 +207,14 @@ _vt_routes_has_entry (const VTableIP *vtable, const GPtrArray *routes, const Ent
 
 	route.rx.metric = entry->effective_metric;
 
-	if (vtable->vt->is_ip4) {
-		for (i = 0; i < routes->len; i++) {
-			const NMPlatformIP4Route *r = NMP_OBJECT_CAST_IP4_ROUTE (routes->pdata[i]);
+	for (i = 0; i < routes->len; i++) {
+		const NMPlatformIPXRoute *r = NMP_OBJECT_CAST_IPX_ROUTE (routes->pdata[i]);
 
-			route.rx.rt_source = r->rt_source;
-			if (nm_platform_ip4_route_cmp (r, &route.r4) == 0)
-				return TRUE;
-		}
-	} else {
-		for (i = 0; i < routes->len; i++) {
-			const NMPlatformIP6Route *r = NMP_OBJECT_CAST_IP6_ROUTE (routes->pdata[i]);
-
-			route.rx.rt_source = r->rt_source;
-			if (nm_platform_ip6_route_cmp (r, &route.r6) == 0)
-				return TRUE;
-		}
+		route.rx.rt_source = r->rx.rt_source;
+		if (vtable->vt->route_cmp (r, &route, TRUE) == 0)
+			return TRUE;
 	}
+
 	return FALSE;
 }
 
