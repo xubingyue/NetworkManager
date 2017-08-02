@@ -81,6 +81,8 @@ nm_setting_pppoe_new (void)
  * @setting: the #NMSettingPppoe
  *
  * Returns: the #NMSettingPppoe:parent property of the setting
+ *
+ * Since: 1.10
  **/
 const char *
 nm_setting_pppoe_get_parent (NMSettingPppoe *setting)
