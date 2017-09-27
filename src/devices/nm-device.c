@@ -4405,12 +4405,13 @@ nm_device_match_parent (NMDevice *self, const char *parent)
 		NMActiveConnection *ac;
 		NMConnection *connection;
 
-		/* If the parent is a UUID, the connection matches if our parent
-		 * device has that connection activated.
+		/* If the parent is a UUID, the connection matches when there is
+		 * no connection active on the device or when a connection with
+		 * that UUID is active.
 		 */
 		ac = (NMActiveConnection *) nm_device_get_act_request (parent_device);
 		if (!ac)
-			return FALSE;
+			return TRUE;
 
 		connection = nm_active_connection_get_applied_connection (ac);
 		if (!connection)
