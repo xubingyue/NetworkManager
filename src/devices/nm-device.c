@@ -3441,8 +3441,10 @@ nm_device_unrealize (NMDevice *self, gboolean remove_resources, GError **error)
 
 	if (remove_resources) {
 		if (NM_DEVICE_GET_CLASS (self)->unrealize) {
-			if (!NM_DEVICE_GET_CLASS (self)->unrealize (self, error))
+			if (!NM_DEVICE_GET_CLASS (self)->unrealize (self, error)) {
+				g_object_thaw_notify (G_OBJECT (self));
 				return FALSE;
+			}
 		} else if (ifindex > 0) {
 			nm_platform_link_delete (nm_device_get_platform (self), ifindex);
 		}
