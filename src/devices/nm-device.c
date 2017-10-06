@@ -5914,20 +5914,27 @@ dhcp4_fail (NMDevice *self, gboolean timeout)
 		return;
 	}
 
-	if (   priv->dhcp4.num_tries_left == DHCP_NUM_TRIES_MAX
-	    && (timeout || (priv->ip4_state == IP_CONF))
-	    && !priv->dhcp4.was_active)
-		nm_device_activate_schedule_ip4_config_timeout (self);
-	else if (priv->ip4_state == IP_DONE || priv->dhcp4.was_active) {
+	if (   priv->ip4_state == IP_DONE
+	    || priv->dhcp4.was_active) {
 		/* Don't fail immediately when the lease expires but try to
 		 * restart DHCP for a predefined number of times.
 		 */
 		if (priv->dhcp4.num_tries_left) {
-			priv->dhcp4.num_tries_left--;
+			/* When may-fail is "yes" we will never fail a connection
+			 * due to a lease expiration: so we should keep trying to
+			 * get the lease back. If may-fail is "no" instead, after
+			 * the num_tries_left reaches zero, we will tear down the
+			 * connection.
+			 */
+			if (!get_ip_config_may_fail (self, AF_INET))
+				priv->dhcp4.num_tries_left--;
 			dhcp_schedule_restart (self, AF_INET, "lease expired");
 		} else
 			nm_device_ip_method_failed (self, AF_INET, NM_DEVICE_STATE_REASON_IP_CONFIG_EXPIRED);
-	} else
+	} else 	if (   priv->ip4_state == IP_CONF
+	            || timeout)
+		nm_device_activate_schedule_ip4_config_timeout (self);
+	else
 		g_warn_if_reached ();
 }
 
@@ -6640,20 +6647,27 @@ dhcp6_fail (NMDevice *self, gboolean timeout)
 			return;
 		}
 
-		if (   priv->dhcp6.num_tries_left == DHCP_NUM_TRIES_MAX
-		    && (timeout || (priv->ip6_state == IP_CONF))
-		    && !priv->dhcp6.was_active)
-			nm_device_activate_schedule_ip6_config_timeout (self);
-		else if (priv->ip6_state == IP_DONE || priv->dhcp6.was_active) {
+		if (   priv->ip6_state == IP_DONE
+		    || priv->dhcp6.was_active) {
 			/* Don't fail immediately when the lease expires but try to
 			 * restart DHCP for a predefined number of times.
 			 */
 			if (priv->dhcp6.num_tries_left) {
-				priv->dhcp6.num_tries_left--;
+				/* When may-fail is "yes" we will never fail a connection
+				 * due to a lease expiration: so we should keep trying to
+				 * get the lease back. If may-fail is "no" instead, after
+				 * the num_tries_left reaches zero, we will tear down the
+				 * connection.
+				 */
+				if (!get_ip_config_may_fail (self, AF_INET6))
+					priv->dhcp6.num_tries_left--;
 				dhcp_schedule_restart (self, AF_INET6, "lease expired");
 			} else
 				nm_device_ip_method_failed (self, AF_INET6, NM_DEVICE_STATE_REASON_IP_CONFIG_EXPIRED);
-		} else
+		} else if (   priv->ip6_state == IP_CONF
+		           || timeout)
+			nm_device_activate_schedule_ip6_config_timeout (self);
+		else
 			g_warn_if_reached ();
 	} else {
 		/* not a hard failure; just live with the RA info */
