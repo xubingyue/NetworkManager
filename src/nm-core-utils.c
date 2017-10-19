@@ -2728,6 +2728,8 @@ _get_contents_error (GError **error, int errsv, const char *format, ...)
  * nm_utils_fd_get_contents:
  * @fd: open file descriptor to read. The fd will not be closed,
  *   but don't rely on it's state afterwards.
+ * @close_fd: if %TRUE, @fd will be closed by the function.
+ *  Passing %TRUE here might safe a syscall for dup().
  * @max_length: allocate at most @max_length bytes. If the
  *   file is larger, reading will fail. Set to zero to use
  *   a very large default.
@@ -2755,11 +2757,13 @@ _get_contents_error (GError **error, int errsv, const char *format, ...)
  */
 int
 nm_utils_fd_get_contents (int fd,
+                          gboolean close_fd,
                           gsize max_length,
                           char **contents,
                           gsize *length,
                           GError **error)
 {
+	nm_auto_close int fd_keeper = close_fd ? fd : -1;
 	struct stat stat_buf;
 	gs_free char *str = NULL;
 
@@ -2807,9 +2811,13 @@ nm_utils_fd_get_contents (int fd,
 		gsize n_have, n_alloc;
 		int fd2;
 
-		fd2 = dup (fd);
-		if (fd2 < 0)
-			return _get_contents_error (error, 0, "error during dup");
+		if (close_fd)
+			fd2 = nm_steal_fd (&fd_keeper);
+		else {
+			fd2 = dup (fd);
+			if (fd2 < 0)
+				return _get_contents_error (error, 0, "error during dup");
+		}
 
 		if (!(f = fdopen (fd2, "r"))) {
 			close (fd2);
@@ -2904,7 +2912,7 @@ nm_utils_file_get_contents (int dirfd,
                             gsize *length,
                             GError **error)
 {
-	nm_auto_close int fd = -1;
+	int fd;
 	int errsv;
 
 	g_return_val_if_fail (filename && filename[0], -EINVAL);
@@ -2937,6 +2945,7 @@ nm_utils_file_get_contents (int dirfd,
 		}
 	}
 	return nm_utils_fd_get_contents (fd,
+	                                 TRUE,
 	                                 max_length,
 	                                 contents,
 	                                 length,
