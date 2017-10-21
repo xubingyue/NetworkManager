@@ -15,17 +15,26 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
- * Copyright (C) 2016 Red Hat, Inc.
+ * Copyright (C) 2016-2017 Red Hat, Inc.
  */
 
 #ifndef __NM_CHECKPOINT_MANAGER_H__
 #define __NM_CHECKPOINT_MANAGER_H__
 
 #include "nm-dbus-interface.h"
-
 #include "nm-checkpoint.h"
 
+#define NM_TYPE_CHECKPOINT_MANAGER            (nm_checkpoint_manager_get_type ())
+#define NM_CHECKPOINT_MANAGER(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), NM_TYPE_CHECKPOINT_MANAGER, NMCheckpointManager))
+#define NM_CHECKPOINT_MANAGER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass),  NM_TYPE_CHECKPOINT_MANAGER, NMCheckpointManagerClass))
+#define NM_IS_CHECKPOINT_MANAGER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), NM_TYPE_CHECKPOINT_MANAGER))
+#define NM_IS_CHECKPOINT_MANAGER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass),  NM_TYPE_CHECKPOINT_MANAGER))
+#define NM_CHECKPOINT_MANAGER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj),  NM_TYPE_CHECKPOINT_MANAGER, NMCheckpointManagerClass))
+
+typedef struct _NMCheckpointManagerClass NMCheckpointManagerClass;
 typedef struct _NMCheckpointManager NMCheckpointManager;
+
+GType nm_checkpoint_manager_get_type (void);
 
 NMCheckpointManager *nm_checkpoint_manager_new (NMManager *manager);
 void nm_checkpoint_manager_unref (NMCheckpointManager *self);

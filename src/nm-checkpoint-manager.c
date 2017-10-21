@@ -30,24 +30,35 @@
 #include "nm-manager.h"
 #include "nm-utils.h"
 
-/*****************************************************************************/
-
-struct _NMCheckpointManager {
+typedef struct {
 	NMManager *_manager;
 	GHashTable *checkpoints;
 	guint rollback_timeout_id;
+} NMCheckpointManagerPrivate;
+
+struct _NMCheckpointManager {
+	GObject parent;
+	NMCheckpointManagerPrivate _priv;
 };
 
-#define GET_MANAGER(self) \
-	({ \
-		typeof (self) _self = (self); \
-		\
-		_nm_unused NMCheckpointManager *_self2 = _self; \
-		\
-		nm_assert (_self); \
-		nm_assert (NM_IS_MANAGER (_self->_manager)); \
-		_self->_manager; \
-	})
+struct _NMCheckpointManagerClass {
+	GObjectClass parent;
+};
+
+G_DEFINE_TYPE (NMCheckpointManager, nm_checkpoint_manager, G_TYPE_OBJECT)
+
+#define NM_CHECKPOINT_MANAGER_GET_PRIVATE(self) _NM_GET_PRIVATE (self, NMCheckpointManager, NM_IS_CHECKPOINT_MANAGER)
+
+#define GET_MANAGER(priv) \
+       ({ \
+               typeof (priv) _priv = (priv); \
+               \
+               _nm_unused NMCheckpointManagerPrivate *_priv2 = _priv; \
+               \
+               nm_assert (_priv); \
+               nm_assert (NM_IS_MANAGER (_priv->_manager)); \
+               _priv->_manager; \
+       })
 
 /*****************************************************************************/
 
@@ -68,6 +79,7 @@ checkpoint_destroy (gpointer checkpoint)
 static gboolean
 rollback_timeout_cb (NMCheckpointManager *self)
 {
+	NMCheckpointManagerPrivate *priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
 	NMCheckpoint *checkpoint;
 	GHashTableIter iter;
 	GVariant *result;
@@ -75,7 +87,7 @@ rollback_timeout_cb (NMCheckpointManager *self)
 
 	now = nm_utils_get_monotonic_timestamp_ms ();
 
-	g_hash_table_iter_init (&iter, self->checkpoints);
+	g_hash_table_iter_init (&iter, priv->checkpoints);
 	while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &checkpoint)) {
 		ts = nm_checkpoint_get_rollback_ts (checkpoint);
 		if (ts && ts <= now) {
@@ -86,7 +98,7 @@ rollback_timeout_cb (NMCheckpointManager *self)
 		}
 	}
 
-	self->rollback_timeout_id = 0;
+	priv->rollback_timeout_id = 0;
 	update_rollback_timeout (self);
 
 	return G_SOURCE_REMOVE;
@@ -95,22 +107,23 @@ rollback_timeout_cb (NMCheckpointManager *self)
 static void
 update_rollback_timeout (NMCheckpointManager *self)
 {
+	NMCheckpointManagerPrivate *priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
 	NMCheckpoint *checkpoint;
 	GHashTableIter iter;
 	gint64 ts, delta, next = G_MAXINT64;
 
-	g_hash_table_iter_init (&iter, self->checkpoints);
+	g_hash_table_iter_init (&iter, priv->checkpoints);
 	while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &checkpoint)) {
 		ts = nm_checkpoint_get_rollback_ts (checkpoint);
 		if (ts && ts < next)
 			next = ts;
 	}
 
-	nm_clear_g_source (&self->rollback_timeout_id);
+	nm_clear_g_source (&priv->rollback_timeout_id);
 
 	if (next != G_MAXINT64) {
 		delta = MAX (next - nm_utils_get_monotonic_timestamp_ms (), 0);
-		self->rollback_timeout_id = g_timeout_add (delta,
+		priv->rollback_timeout_id = g_timeout_add (delta,
 		                                           (GSourceFunc) rollback_timeout_cb,
 		                                           self);
 		_LOGT ("update timeout: next check in %" G_GINT64_FORMAT " ms", delta);
@@ -120,10 +133,11 @@ update_rollback_timeout (NMCheckpointManager *self)
 static NMCheckpoint *
 find_checkpoint_for_device (NMCheckpointManager *self, NMDevice *device)
 {
+	NMCheckpointManagerPrivate *priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
 	GHashTableIter iter;
 	NMCheckpoint *checkpoint;
 
-	g_hash_table_iter_init (&iter, self->checkpoints);
+	g_hash_table_iter_init (&iter, priv->checkpoints);
 	while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &checkpoint)) {
 		if (nm_checkpoint_includes_device (checkpoint, device))
 			return checkpoint;
@@ -139,6 +153,7 @@ nm_checkpoint_manager_create (NMCheckpointManager *self,
                               NMCheckpointCreateFlags flags,
                               GError **error)
 {
+	NMCheckpointManagerPrivate *priv;
 	NMManager *manager;
 	NMCheckpoint *checkpoint;
 	const char * const *path;
@@ -148,9 +163,10 @@ nm_checkpoint_manager_create (NMCheckpointManager *self,
 	gs_free const char **device_paths_free = NULL;
 	guint i;
 
-	g_return_val_if_fail (self, FALSE);
+	g_return_val_if_fail (NM_IS_CHECKPOINT_MANAGER (self), FALSE);
 	g_return_val_if_fail (!error || !*error, FALSE);
-	manager = GET_MANAGER (self);
+	priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
+	manager = GET_MANAGER (priv);
 
 	if (!device_paths || !device_paths[0]) {
 		device_paths_free = nm_manager_get_device_paths (manager);
@@ -189,12 +205,12 @@ nm_checkpoint_manager_create (NMCheckpointManager *self,
 		return NULL;
 
 	if (NM_FLAGS_HAS (flags, NM_CHECKPOINT_CREATE_FLAG_DESTROY_ALL))
-		g_hash_table_remove_all (self->checkpoints);
+		g_hash_table_remove_all (priv->checkpoints);
 
 	nm_exported_object_export (NM_EXPORTED_OBJECT (checkpoint));
 	checkpoint_path = nm_exported_object_get_path (NM_EXPORTED_OBJECT (checkpoint));
 
-	if (!nm_g_hash_table_insert (self->checkpoints,
+	if (!nm_g_hash_table_insert (priv->checkpoints,
 	                             (gpointer) checkpoint_path,
 	                             checkpoint))
 		g_return_val_if_reached (NULL);
@@ -208,9 +224,12 @@ gboolean
 nm_checkpoint_manager_destroy_all (NMCheckpointManager *self,
                                    GError **error)
 {
-	g_return_val_if_fail (self, FALSE);
+	NMCheckpointManagerPrivate *priv;
 
-	g_hash_table_remove_all (self->checkpoints);
+	g_return_val_if_fail (NM_IS_CHECKPOINT_MANAGER (self), FALSE);
+	priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
+
+	g_hash_table_remove_all (priv->checkpoints);
 
 	return TRUE;
 }
@@ -220,14 +239,17 @@ nm_checkpoint_manager_destroy (NMCheckpointManager *self,
                                const char *checkpoint_path,
                                GError **error)
 {
+	NMCheckpointManagerPrivate *priv;
 	gboolean ret;
 
-	g_return_val_if_fail (self, FALSE);
+	g_return_val_if_fail (NM_IS_CHECKPOINT_MANAGER (self), FALSE);
 	g_return_val_if_fail (checkpoint_path && checkpoint_path[0] == '/', FALSE);
 	g_return_val_if_fail (!error || !*error, FALSE);
 
+	priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
+
 	if (!nm_streq (checkpoint_path, "/")) {
-		ret = g_hash_table_remove (self->checkpoints, checkpoint_path);
+		ret = g_hash_table_remove (priv->checkpoints, checkpoint_path);
 		if (!ret) {
 			g_set_error (error,
 			             NM_MANAGER_ERROR,
@@ -245,14 +267,17 @@ nm_checkpoint_manager_rollback (NMCheckpointManager *self,
                                 GVariant **results,
                                 GError **error)
 {
+	NMCheckpointManagerPrivate *priv;
 	NMCheckpoint *cp;
 
-	g_return_val_if_fail (self, FALSE);
+	g_return_val_if_fail (NM_IS_CHECKPOINT_MANAGER (self), FALSE);
 	g_return_val_if_fail (checkpoint_path && checkpoint_path[0] == '/', FALSE);
 	g_return_val_if_fail (results, FALSE);
 	g_return_val_if_fail (!error || !*error, FALSE);
 
-	cp = g_hash_table_lookup (self->checkpoints, checkpoint_path);
+	priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
+
+	cp = g_hash_table_lookup (priv->checkpoints, checkpoint_path);
 	if (!cp) {
 		g_set_error (error, NM_MANAGER_ERROR, NM_MANAGER_ERROR_FAILED,
 		             "checkpoint %s does not exist", checkpoint_path);
@@ -260,21 +285,30 @@ nm_checkpoint_manager_rollback (NMCheckpointManager *self,
 	}
 
 	*results = nm_checkpoint_rollback (cp);
-	g_hash_table_remove (self->checkpoints, checkpoint_path);
+	g_hash_table_remove (priv->checkpoints, checkpoint_path);
 
 	return TRUE;
 }
 
 /*****************************************************************************/
 
+static void
+nm_checkpoint_manager_init (NMCheckpointManager *self)
+{
+	NMCheckpointManagerPrivate *priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
+
+	priv->checkpoints = g_hash_table_new_full (nm_str_hash, g_str_equal,
+	                                           NULL, checkpoint_destroy);
+}
+
 NMCheckpointManager *
 nm_checkpoint_manager_new (NMManager *manager)
 {
 	NMCheckpointManager *self;
+	NMCheckpointManagerPrivate *priv;
 
-	g_return_val_if_fail (NM_IS_MANAGER (manager), FALSE);
-
-	self = g_slice_new0 (NMCheckpointManager);
+	self = g_object_new (NM_TYPE_CHECKPOINT_MANAGER, NULL);
+	priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
 
 	/* the NMCheckpointManager instance is actually owned by NMManager.
 	 * Thus, we cannot take a reference to it, and we also don't bother
@@ -282,21 +316,27 @@ nm_checkpoint_manager_new (NMManager *manager)
 	 * self->_manager is alive -- which we always expect as the lifetime
 	 * of NMManager shall surpass the lifetime of the NMCheckpointManager
 	 * instance. */
-	self->_manager = manager;
-	self->checkpoints = g_hash_table_new_full (nm_str_hash, g_str_equal,
-	                                           NULL, checkpoint_destroy);
+	priv->_manager = manager;
 
 	return self;
 }
 
-void
-nm_checkpoint_manager_unref (NMCheckpointManager *self)
+static void
+dispose (GObject *object)
 {
-	if (!self)
-		return;
+	NMCheckpointManager *self = NM_CHECKPOINT_MANAGER (object);
+	NMCheckpointManagerPrivate *priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
 
-	nm_clear_g_source (&self->rollback_timeout_id);
-	g_hash_table_destroy (self->checkpoints);
+	nm_clear_g_source (&priv->rollback_timeout_id);
+	g_clear_pointer (&priv->checkpoints, g_hash_table_unref);
 
-	g_slice_free (NMCheckpointManager, self);
+	G_OBJECT_CLASS (nm_checkpoint_manager_parent_class)->dispose (object);
+}
+
+static void
+nm_checkpoint_manager_class_init (NMCheckpointManagerClass *klass)
+{
+	GObjectClass *object_class = G_OBJECT_CLASS (klass);
+
+	object_class->dispose = dispose;
 }
