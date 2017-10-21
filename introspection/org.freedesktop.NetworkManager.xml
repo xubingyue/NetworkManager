@@ -268,6 +268,14 @@
         for which backing resources can be created if the device is activated.
     -->
     <property name="AllDevices" type="ao" access="read"/>
+    
+        <!--
+        Checkpoints:
+
+        The list of active checkpoints.
+    -->
+    <property name="Checkpoints" type="ao" access="read"/>
+    
 
     <!--
         NetworkingEnabled:

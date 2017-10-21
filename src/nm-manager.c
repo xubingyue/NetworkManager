@@ -220,6 +220,7 @@ NM_GOBJECT_PROPERTIES_DEFINE (NMManager,
 	PROP_METERED,
 	PROP_GLOBAL_DNS_CONFIGURATION,
 	PROP_ALL_DEVICES,
+	PROP_CHECKPOINTS,
 
 	/* Not exported */
 	PROP_SLEEPING,
@@ -5701,13 +5702,26 @@ _set_prop_filter (NMManager *self, GDBusConnection *connection)
 
 /*****************************************************************************/
 
+static void
+_checkpoint_mgr_changed (NMCheckpointManager *cp_manager,
+                         GParamSpec *pspec,
+                         NMManager *self)
+{
+	_notify (self, PROP_CHECKPOINTS);
+}
+
 static NMCheckpointManager *
 _checkpoint_mgr_get (NMManager *self, gboolean create_as_needed)
 {
 	NMManagerPrivate *priv = NM_MANAGER_GET_PRIVATE (self);
 
-	if (G_UNLIKELY (!priv->checkpoint_mgr) && create_as_needed)
+	if (G_UNLIKELY (!priv->checkpoint_mgr) && create_as_needed) {
 		priv->checkpoint_mgr = nm_checkpoint_manager_new (self);
+		g_signal_connect (priv->checkpoint_mgr,
+		                  "notify::" NM_CHECKPOINT_MANAGER_CHECKPOINTS,
+		                  (GCallback) _checkpoint_mgr_changed,
+		                  self);
+	}
 	return priv->checkpoint_mgr;
 }
 
@@ -6335,6 +6349,17 @@ get_property (GObject *object, guint prop_id,
 	case PROP_ALL_DEVICES:
 		nm_utils_g_value_set_object_path_array (value, priv->devices, NULL, NULL);
 		break;
+	case PROP_CHECKPOINTS:
+		if (priv->checkpoint_mgr) {
+			char **strv;
+
+			g_object_get (priv->checkpoint_mgr,
+			              NM_CHECKPOINT_MANAGER_CHECKPOINTS, &strv,
+			              NULL);
+			g_value_take_boxed (value, strv);
+		} else
+			g_value_set_boxed (value, NULL);
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
 		break;
@@ -6685,6 +6710,19 @@ nm_manager_class_init (NMManagerClass *manager_class)
 	 **/
 	obj_properties[PROP_ALL_DEVICES] =
 	    g_param_spec_boxed (NM_MANAGER_ALL_DEVICES, "", "",
+	                        G_TYPE_STRV,
+	                        G_PARAM_READABLE |
+	                        G_PARAM_STATIC_STRINGS);
+
+	/**
+	 * NMManager:checkpoints:
+	 *
+	 * List of active checkpoints.
+	 *
+	 * Since: 1.10
+	 **/
+	obj_properties[PROP_CHECKPOINTS] =
+	    g_param_spec_boxed (NM_MANAGER_CHECKPOINTS, "", "",
 	                        G_TYPE_STRV,
 	                        G_PARAM_READABLE |
 	                        G_PARAM_STATIC_STRINGS);

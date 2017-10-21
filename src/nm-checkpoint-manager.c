@@ -399,6 +399,9 @@ nm_checkpoint_manager_class_init (NMCheckpointManagerClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+	object_class->dispose = dispose;
+	object_class->get_property = get_property;
+
 	obj_properties[PROP_CHECKPOINTS] =
 	    g_param_spec_boxed (NM_CHECKPOINT_MANAGER_CHECKPOINTS, "", "",
 	                        G_TYPE_STRV,
@@ -406,7 +409,4 @@ nm_checkpoint_manager_class_init (NMCheckpointManagerClass *klass)
 	                        G_PARAM_STATIC_STRINGS);
 
 	g_object_class_install_properties (object_class, _PROPERTY_ENUMS_LAST, obj_properties);
-
-	object_class->dispose = dispose;
-	object_class->get_property = get_property;
 }
