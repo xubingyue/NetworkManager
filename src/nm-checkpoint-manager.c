@@ -31,6 +31,10 @@
 #include "nm-utils.h"
 #include "nm-utils/c-list.h"
 
+NM_GOBJECT_PROPERTIES_DEFINE (NMCheckpointManager,
+	PROP_CHECKPOINTS,
+);
+
 typedef struct {
 	NMManager *_manager;
 	GHashTable *checkpoints;
@@ -95,6 +99,7 @@ rollback_timeout_cb (NMCheckpointManager *self)
 	GHashTableIter iter;
 	GVariant *result;
 	gint64 ts, now;
+	gboolean removed = FALSE;
 
 	now = nm_utils_get_monotonic_timestamp_ms ();
 
@@ -106,11 +111,15 @@ rollback_timeout_cb (NMCheckpointManager *self)
 			if (result)
 				g_variant_unref (result);
 			g_hash_table_iter_remove (&iter);
+			removed = TRUE;
 		}
 	}
 
 	priv->rollback_timeout_id = 0;
 	update_rollback_timeout (self);
+
+	if (removed)
+		_notify (self, PROP_CHECKPOINTS);
 
 	return G_SOURCE_REMOVE;
 }
@@ -233,6 +242,7 @@ nm_checkpoint_manager_create (NMCheckpointManager *self,
 	                             item))
 		g_return_val_if_reached (NULL);
 
+	_notify (self, PROP_CHECKPOINTS);
 	update_rollback_timeout (self);
 
 	return checkpoint;
@@ -248,6 +258,7 @@ nm_checkpoint_manager_destroy_all (NMCheckpointManager *self,
 	priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
 
 	g_hash_table_remove_all (priv->checkpoints);
+	_notify (self, PROP_CHECKPOINTS);
 
 	return TRUE;
 }
@@ -268,7 +279,9 @@ nm_checkpoint_manager_destroy (NMCheckpointManager *self,
 
 	if (!nm_streq (checkpoint_path, "/")) {
 		ret = g_hash_table_remove (priv->checkpoints, checkpoint_path);
-		if (!ret) {
+		if (ret) {
+			_notify (self, PROP_CHECKPOINTS);
+		} else {
 			g_set_error (error,
 			             NM_MANAGER_ERROR,
 			             NM_MANAGER_ERROR_INVALID_ARGUMENTS,
@@ -304,11 +317,40 @@ nm_checkpoint_manager_rollback (NMCheckpointManager *self,
 
 	*results = nm_checkpoint_rollback (item->checkpoint);
 	g_hash_table_remove (priv->checkpoints, checkpoint_path);
+	_notify (self, PROP_CHECKPOINTS);
 
 	return TRUE;
 }
 
 /*****************************************************************************/
+static void
+get_property (GObject *object, guint prop_id,
+              GValue *value, GParamSpec *pspec)
+{
+	NMCheckpointManager *self = NM_CHECKPOINT_MANAGER (object);
+	NMCheckpointManagerPrivate *priv = NM_CHECKPOINT_MANAGER_GET_PRIVATE (self);
+	CheckpointItem *item;
+	char **strv;
+	guint num, i = 0;
+	CList *iter;
+
+	switch (prop_id) {
+	case PROP_CHECKPOINTS:
+		num = g_hash_table_size (priv->checkpoints);
+		strv = g_new (char *, num + 1);
+		c_list_for_each (iter, &priv->list) {
+			item = c_list_entry (iter, CheckpointItem, list);
+			strv[i++] = g_strdup (nm_exported_object_get_path (NM_EXPORTED_OBJECT (item->checkpoint)));
+		}
+		nm_assert (i == num);
+		strv[i] = NULL;
+		g_value_take_boxed (value, strv);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+		break;
+	}
+}
 
 static void
 nm_checkpoint_manager_init (NMCheckpointManager *self)
@@ -357,5 +399,14 @@ nm_checkpoint_manager_class_init (NMCheckpointManagerClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+	obj_properties[PROP_CHECKPOINTS] =
+	    g_param_spec_boxed (NM_CHECKPOINT_MANAGER_CHECKPOINTS, "", "",
+	                        G_TYPE_STRV,
+	                        G_PARAM_READABLE |
+	                        G_PARAM_STATIC_STRINGS);
+
+	g_object_class_install_properties (object_class, _PROPERTY_ENUMS_LAST, obj_properties);
+
 	object_class->dispose = dispose;
+	object_class->get_property = get_property;
 }

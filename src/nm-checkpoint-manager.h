@@ -31,6 +31,8 @@
 #define NM_IS_CHECKPOINT_MANAGER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass),  NM_TYPE_CHECKPOINT_MANAGER))
 #define NM_CHECKPOINT_MANAGER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj),  NM_TYPE_CHECKPOINT_MANAGER, NMCheckpointManagerClass))
 
+#define NM_CHECKPOINT_MANAGER_CHECKPOINTS "checkpoints"
+
 typedef struct _NMCheckpointManagerClass NMCheckpointManagerClass;
 typedef struct _NMCheckpointManager NMCheckpointManager;
 
