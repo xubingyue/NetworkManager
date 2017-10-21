@@ -51,6 +51,7 @@ G_BEGIN_DECLS
 #define NM_MANAGER_PRIMARY_CONNECTION "primary-connection"
 #define NM_MANAGER_ACTIVATING_CONNECTION "activating-connection"
 #define NM_MANAGER_DEVICES "devices"
+#define NM_MANAGER_CHECKPOINTS "checkpoints"
 #define NM_MANAGER_METERED "metered"
 #define NM_MANAGER_ALL_DEVICES "all-devices"
 
@@ -75,6 +76,8 @@ typedef struct {
 
 	/* nm-manager.h is internal API. We can add more slots without breaking ABI. */
 } NMManagerClass;
+
+typedef struct _NMCheckpoint NMCheckpoint;
 
 GType nm_manager_get_type (void);
 
@@ -183,6 +186,28 @@ void     nm_manager_deactivate_connection_async  (NMManager *manager,
 gboolean nm_manager_deactivate_connection_finish (NMManager *manager,
                                                   GAsyncResult *result,
                                                   GError **error);
+
+const GPtrArray *nm_manager_get_checkpoints (NMManager *manager);
+
+NM_AVAILABLE_IN_1_10
+const GPtrArray *nm_manager_get_checkpoints (NMManager *manager);
+NM_AVAILABLE_IN_1_10
+NMCheckpoint *nm_manager_checkpoint_create (NMManager *manager,
+                                            const GPtrArray *devices,
+                                            guint32 rollback_timeout,
+                                            NMCheckpointCreateFlags flags,
+                                            GCancellable *cancellable,
+                                            GError **error);
+NM_AVAILABLE_IN_1_10
+gboolean nm_manager_checkpoint_destroy (NMManager *manager,
+                                        NMCheckpoint *checkpoint,
+                                        GCancellable *cancellable,
+                                        GError **error);
+NM_AVAILABLE_IN_1_10
+GHashTable *nm_manager_checkpoint_rollback (NMManager *manager,
+                                            NMCheckpoint *checkpoint,
+                                            GCancellable *cancellable,
+                                            GError **error);
 
 G_END_DECLS
 

@@ -269,7 +269,7 @@
     -->
     <property name="AllDevices" type="ao" access="read"/>
     
-        <!--
+    <!--
         Checkpoints:
 
         The list of active checkpoints.
