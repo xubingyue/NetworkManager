@@ -36,6 +36,552 @@
  * necessary for team connections.
  **/
 
+/*****************************************************************************
+ * NMTeamLinkWatch
+ *****************************************************************************/
+
+G_DEFINE_BOXED_TYPE (NMTeamLinkWatcher, nm_team_link_watcher,
+                     nm_team_link_watcher_dup, nm_team_link_watcher_unref)
+
+struct NMTeamLinkWatcher {
+	guint refcount;
+
+	char *name;	/* [ethtool, arp_ping, nsna_ping] */
+
+	union {
+		struct {
+			int delay_up;
+			int delay_down;
+		} ethtool;
+		struct {
+			int init_wait;
+			int interval;
+			int missed_max;
+			char *target_host;
+		} nsna_ping;
+		struct {
+			int init_wait;
+			int interval;
+			int missed_max;
+			char *target_host;
+			char *source_host;
+			NMTeamLinkWatcherArpPingFlags flags;
+		} arp_ping;
+	};
+};
+
+/** nm_team_link_watcher_new:
+ * @name: the type of the link watcher to use (<literal>ethtool</literal>,
+ *   <literal>arp_ping</literal> or <literal>nsna_ping</literal>)
+ * @val1: <literal>delay_up</literal> for <literal>ethtool</literal> watcher,
+ *   <literal>init_wait</literal> otherwise
+ * @val2: <literal>delay_down</literal> for <literal>ethtool</literal> watcher,
+ *   <literal>interval</literal> otherwise
+ * @val3: ignored for <literal>ethtool</literal> watcher, <literal>missed_max
+ *   </literal> for <literal>arp_ping</literal> and <literal>nsa_ping</literal>
+ *   watchers
+ * @target_host: the ip address of the host to check (<literal>arp_ping</literal>
+ *   and <literal>nsna_ping</literal> only)
+ * @source_host: the ip address used in the arping request (<literal>arp_ping
+ *   </literal> only)
+ * @flags: flags for the <literal>arp_ping</literal> watcher
+ * @error: location to store error, or &NULL
+ *
+ * Creates a new #NMTeamLinkWatcher object
+ *
+ * Returns: (transfer full): the new #NMTeamLinkWatcher object, or %NULL on error
+ *
+ * Since: 1.12
+ **/
+NMTeamLinkWatcher *
+nm_team_link_watcher_new (const char *name,
+                          gint val1,
+                          gint val2,
+                          gint val3,
+                          const char *target_host,
+                          const char *source_host,
+                          NMTeamLinkWatcherArpPingFlags flags,
+                          GError **error)
+{
+	NMTeamLinkWatcher *watcher;
+
+	g_return_val_if_fail (name, NULL);
+
+	if (   !nm_streq (name, NM_TEAM_LINK_WATCHER_ETHTOOL)
+	    && !nm_streq (name, NM_TEAM_LINK_WATCHER_ARP_PING)
+	    && !nm_streq (name, NM_TEAM_LINK_WATCHER_NSNA_PING)) {
+		g_set_error (error, NM_CONNECTION_ERROR, NM_CONNECTION_ERROR_FAILED,
+		             _("Unknown team link watcher name: '%s'"), name);
+		return NULL;
+	}
+
+	watcher = g_slice_new0 (NMTeamLinkWatcher);
+	watcher->refcount = 1;
+
+	watcher->name = g_strdup (name);
+
+	watcher->ethtool.delay_up = val1;
+	watcher->ethtool.delay_down = val2;
+
+	if (nm_streq (name, NM_TEAM_LINK_WATCHER_ETHTOOL))
+		return watcher;
+
+	if (!target_host) {
+		g_set_error (error, NM_CONNECTION_ERROR, NM_CONNECTION_ERROR_FAILED,
+		             _("Missing target-host in %s link watcher"), name);
+		goto fail;
+	}
+	watcher->nsna_ping.missed_max = val1;
+	watcher->nsna_ping.target_host = g_strdup (target_host);
+
+	if (nm_streq (name, NM_TEAM_LINK_WATCHER_NSNA_PING))
+		return watcher;
+
+	if (!source_host) {
+		g_set_error (error, NM_CONNECTION_ERROR, NM_CONNECTION_ERROR_FAILED,
+		             _("Missing source-host in arp-ping link watcher"));
+		goto fail;
+	}
+	watcher->arp_ping.source_host = g_strdup (source_host);
+	watcher->arp_ping.flags = flags;
+	return watcher;
+
+fail:
+	g_free (watcher->name);
+	g_free (watcher->arp_ping.target_host);
+	g_free (watcher->arp_ping.source_host);
+	g_slice_free (NMTeamLinkWatcher, watcher);
+	return NULL;
+}
+
+/**
+ * nm_team_link_watcher_ref:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Increases the reference count of the object.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_ref (NMTeamLinkWatcher *watcher)
+{
+	g_return_if_fail (watcher != NULL);
+	g_return_if_fail (watcher->refcount > 0);
+
+	watcher->refcount++;
+}
+
+/**
+ * nm_team_link_watcher_unref:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Decreases the reference count of the object.  If the reference count
+ * reaches zero, the object will be destroyed.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_unref (NMTeamLinkWatcher *watcher)
+{
+	g_return_if_fail (watcher != NULL);
+	g_return_if_fail (watcher->refcount > 0);
+
+	watcher->refcount--;
+	if (watcher->refcount == 0) {
+		g_free (watcher->name);
+		g_free (watcher->arp_ping.target_host);
+		g_free (watcher->arp_ping.source_host);
+		g_slice_free (NMTeamLinkWatcher, watcher);
+	}
+}
+
+/**
+ * nm_team_link_watcher_equal:
+ * @watcher: the #NMTeamLinkWatcher
+ * @other: the #NMTeamLinkWatcher to compare @watcher to.
+ *
+ * Determines if two #NMTeamLinkWatcher objects contain the same values
+ * in all the properties.
+ *
+ * Returns: %TRUE if the objects contain the same values, %FALSE if they do not.
+ *
+ * Since: 1.12
+ **/
+gboolean
+nm_team_link_watcher_equal (NMTeamLinkWatcher *watcher, NMTeamLinkWatcher *other)
+{
+	g_return_val_if_fail (watcher != NULL, FALSE);
+	g_return_val_if_fail (watcher->refcount > 0, FALSE);
+
+	g_return_val_if_fail (other != NULL, FALSE);
+	g_return_val_if_fail (other->refcount > 0, FALSE);
+
+	if (   !nm_streq0 (watcher->name, other->name)
+	    || !nm_streq0 (watcher->arp_ping.target_host, other->arp_ping.target_host)
+	    || !nm_streq0 (watcher->arp_ping.source_host, other->arp_ping.source_host)
+	    || (watcher->arp_ping.init_wait != other->arp_ping.init_wait)
+	    || (watcher->arp_ping.interval != other->arp_ping.interval)
+	    || (watcher->arp_ping.missed_max != other->arp_ping.missed_max)
+	    || (watcher->arp_ping.flags != other->arp_ping.flags))
+		return FALSE;
+
+	return TRUE;
+}
+
+/**
+ * nm_team_link_watcher_dup:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Creates a copy of @watcher
+ *
+ * Returns: (transfer full): a copy of @watcher
+ *
+ * Since: 1.12
+ **/
+NMTeamLinkWatcher *
+nm_team_link_watcher_dup (NMTeamLinkWatcher *watcher)
+{
+	g_return_val_if_fail (watcher != NULL, NULL);
+	g_return_val_if_fail (watcher->refcount > 0, NULL);
+
+	return nm_team_link_watcher_new (watcher->name,
+	                                 watcher->arp_ping.init_wait,
+	                                 watcher->arp_ping.interval,
+	                                 watcher->arp_ping.missed_max,
+	                                 watcher->arp_ping.target_host,
+	                                 watcher->arp_ping.source_host,
+	                                 watcher->arp_ping.flags,
+	                                 NULL);
+}
+
+/**
+ * nm_team_link_watcher_get_name:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Gets the name of the link watcher to be used.
+ *
+ * Since: 1.12
+ **/
+const char *
+nm_team_link_watcher_get_name (NMTeamLinkWatcher *watcher)
+{
+	g_return_val_if_fail (watcher != NULL, NULL);
+	g_return_val_if_fail (watcher->refcount > 0, NULL);
+
+	return watcher->name;
+}
+
+/**
+ * nm_team_link_watcher_set_name:
+ * @watcher: the #NMTeamLinkWatcher
+ * @name: the link watcher's name to use
+ *
+ * Sets the name of the link watcher to be used.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_set_name (NMTeamLinkWatcher *watcher,
+                               const char *name)
+{
+	g_return_if_fail (watcher != NULL);
+	g_return_if_fail (name != NULL);
+
+	g_free (watcher->name);
+	watcher->name = g_strdup (name);
+}
+
+/**
+ * nm_team_link_watcher_get_delay_up:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Gets the delay_up interval (in milliseconds) that elapses between the link
+ * coming up and the runner beeing notified about it.
+ *
+ * Since: 1.12
+ **/
+int
+nm_team_link_watcher_get_delay_up (NMTeamLinkWatcher *watcher)
+{
+	return nm_team_link_watcher_get_init_wait (watcher);
+}
+
+/**
+ * nm_team_link_watcher_set_delay_up:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Sets the delay_up interval (in milliseconds) that elapses between the link
+ * coming up and the runner beeing notified about it.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_set_delay_up (NMTeamLinkWatcher *watcher,
+                                   int delay_up)
+{
+	nm_team_link_watcher_set_init_wait (watcher, delay_up);
+}
+
+
+/**
+ * nm_team_link_watcher_get_delay_down:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Gets the delay_down interval (in milliseconds) that elapses between the link
+ * going down and the runner beeing notified about it.
+ *
+ * Since: 1.12
+ **/
+int
+nm_team_link_watcher_get_delay_down (NMTeamLinkWatcher *watcher)
+{
+	return nm_team_link_watcher_get_interval (watcher);
+}
+
+/**
+ * nm_team_link_watcher_set_delay_down:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Sets the delay_down interval (in milliseconds) that elapses between the link
+ * going down and the runner beeing notified about it.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_set_delay_down (NMTeamLinkWatcher *watcher,
+                                     int delay_down)
+{
+	nm_team_link_watcher_set_interval (watcher, delay_down);
+}
+
+
+
+
+/**
+ * nm_team_link_watcher_get_init_wait:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Gets the init_wait interval (in milliseconds) that the team slave should
+ * wait before sending the first packet to the target host.
+ *
+ * Since: 1.12
+ **/
+int
+nm_team_link_watcher_get_init_wait (NMTeamLinkWatcher *watcher)
+{
+	g_return_val_if_fail (watcher != NULL, 0);
+	g_return_val_if_fail (watcher->refcount > 0, 0);
+
+	return watcher->arp_ping.init_wait;
+}
+
+/**
+ * nm_team_link_watcher_set_init_wait:
+ * @watcher: the #NMTeamLinkWatcher
+ * @init_wait: the link watcher's init_wait value to set
+ *
+ * Sets the init_wait interval (in milliseconds) that the team slave should
+ * wait before sending the first packet to the target host.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_set_init_wait (NMTeamLinkWatcher *watcher,
+                                    int init_wait)
+{
+	g_return_if_fail (watcher != NULL);
+	g_return_if_fail (init_wait >= 0);
+
+	watcher->arp_ping.init_wait = init_wait;
+}
+
+/**
+ * nm_team_link_watcher_get_interval:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Gets the interval (in milliseconds) that the team slave should wait between
+ * sending two check packets to the target host.
+ *
+ * Since: 1.12
+ **/
+int
+nm_team_link_watcher_get_interval (NMTeamLinkWatcher *watcher)
+{
+	g_return_val_if_fail (watcher != NULL, 0);
+	g_return_val_if_fail (watcher->refcount > 0, 0);
+
+	return watcher->arp_ping.interval;
+}
+
+/**
+ * nm_team_link_watcher_set_interval:
+ * @watcher: the #NMTeamLinkWatcher
+ * @interval: the link watcher's interval value to set
+ *
+ * Sets the interval (in milliseconds) that the team slave should wait between
+ * sending two check packets to the target host.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_set_interval (NMTeamLinkWatcher *watcher,
+                                   int interval)
+{
+	g_return_if_fail (watcher != NULL);
+	g_return_if_fail (interval >= 0);
+
+	watcher->arp_ping.interval = interval;
+}
+
+/**
+ * nm_team_link_watcher_get_missed_max:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Gets the number of missed replies after which the link is considered down.
+ *
+ * Since: 1.12
+ **/
+int
+nm_team_link_watcher_get_missed_max (NMTeamLinkWatcher *watcher)
+{
+	g_return_val_if_fail (watcher != NULL, 0);
+	g_return_val_if_fail (watcher->refcount > 0, 0);
+
+	return watcher->arp_ping.missed_max;
+}
+
+/**
+ * nm_team_link_watcher_set_missed_max:
+ * @watcher: the #NMTeamLinkWatcher
+ * @missed_max: the link watcher's missed_max interval to set
+ *
+ * Sets the number of missed replies after which the link is considered down.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_set_missed_max (NMTeamLinkWatcher *watcher,
+                                     int missed_max)
+{
+	g_return_if_fail (watcher != NULL);
+	g_return_if_fail (missed_max >= 0);
+
+	watcher->arp_ping.missed_max = missed_max;
+}
+
+/**
+ * nm_team_link_watcher_get_target_host:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Gets the host name/ip address to be used as destination for the link probing
+ * packets.
+ *
+ * Since: 1.12
+ **/
+const char *
+nm_team_link_watcher_get_target_host (NMTeamLinkWatcher *watcher)
+{
+	g_return_val_if_fail (watcher != NULL, NULL);
+	g_return_val_if_fail (watcher->refcount > 0, NULL);
+
+	return watcher->arp_ping.target_host;
+}
+
+/**
+ * nm_team_link_watcher_set_target_host:
+ * @watcher: the #NMTeamLinkWatcher
+ * @target_host: the target host name or ip address
+ *
+ * Sets the host name/ip address to be used as destination for the link probing
+ * packets.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_set_target_host (NMTeamLinkWatcher *watcher,
+                                      const char* target_host)
+{
+	g_return_if_fail (watcher != NULL);
+	g_return_if_fail (target_host != NULL);
+
+	g_free (watcher->arp_ping.target_host);
+	watcher->arp_ping.target_host = g_strdup (target_host);
+}
+
+/**
+ * nm_team_link_watcher_get_source_host:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Gets the ip address to be used as source for the link probing packets.
+ *
+ * Since: 1.12
+ **/
+const char *
+nm_team_link_watcher_get_source_host (NMTeamLinkWatcher *watcher)
+{
+	g_return_val_if_fail (watcher != NULL, NULL);
+	g_return_val_if_fail (watcher->refcount > 0, NULL);
+
+	return watcher->arp_ping.source_host;
+}
+
+/**
+ * nm_team_link_watcher_set_source_host:
+ * @watcher: the #NMTeamLinkWatcher
+ * @source_host: the source host name or ip address
+ *
+ * Sets the host name/ip address to be used as source for the link probing packets.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_set_source_host (NMTeamLinkWatcher *watcher,
+                                      const char* source_host)
+{
+	g_return_if_fail (watcher != NULL);
+	g_return_if_fail (source_host != NULL);
+
+	g_free (watcher->arp_ping.source_host);
+	watcher->arp_ping.source_host = g_strdup (source_host);
+}
+
+/**
+ * nm_team_link_watcher_get_flags:
+ * @watcher: the #NMTeamLinkWatcher
+ *
+ * Gets the arp ping watcher flags.
+ *
+ * Since: 1.12
+ **/
+NMTeamLinkWatcherArpPingFlags
+nm_team_link_watcher_get_flags (NMTeamLinkWatcher *watcher)
+{
+	g_return_val_if_fail (watcher != NULL, 0);
+	g_return_val_if_fail (watcher->refcount > 0, 0);
+
+	return watcher->arp_ping.flags;
+}
+
+/**
+ * nm_team_link_watcher_set_flags:
+ * @watcher: the @NMTeamLinkWatcher
+ * @flags: the arp ping watcher flags to set
+ *
+ * Sets the flags for the arp ping watcher.
+ *
+ * Since: 1.12
+ **/
+void
+nm_team_link_watcher_set_flags (NMTeamLinkWatcher *watcher,
+                                NMTeamLinkWatcherArpPingFlags flags)
+{
+	g_return_if_fail (watcher != NULL);
+
+	watcher->arp_ping.flags = flags;
+}
+
+/*****************************************************************************/
+
 G_DEFINE_TYPE_WITH_CODE (NMSettingTeam, nm_setting_team, NM_TYPE_SETTING,
                          _nm_register_setting (TEAM, NM_SETTING_PRIORITY_HW_BASE))
 NM_SETTING_REGISTER_TYPE (NM_TYPE_SETTING_TEAM)
