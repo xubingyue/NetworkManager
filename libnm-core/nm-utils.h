@@ -230,6 +230,11 @@ char * nm_utils_format_variant_attributes (GHashTable *attributes,
                                            char attr_separator,
                                            char key_value_separator);
 
+NM_AVAILABLE_IN_1_12
+GVariant *nm_utils_team_link_watchers_to_variant (GPtrArray *link_watchers);
+NM_AVAILABLE_IN_1_12
+GPtrArray *nm_utils_team_link_watchers_from_variant (GVariant *value);
+
 G_END_DECLS
 
 #endif /* __NM_UTILS_H__ */

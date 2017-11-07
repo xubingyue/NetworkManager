@@ -1283,4 +1283,6 @@ global:
 	nm_team_link_watcher_set_source_host;
 	nm_team_link_watcher_set_target_host;
 	nm_team_link_watcher_unref;
+	nm_utils_team_link_watchers_from_variant;
+	nm_utils_team_link_watchers_to_variant;
 } libnm_1_10_0;
