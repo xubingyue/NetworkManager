@@ -20,8 +20,15 @@
 #include "nm-device.h"
 #include "nm-object-private.h"
 
+typedef struct {
+	GPtrArray *devices;
+	gint64 created;
+	guint32 rollback_timeout;
+} NMCheckpointPrivate;
+
 struct _NMCheckpoint {
 	NMObject parent;
+	NMCheckpointPrivate _priv;
 };
 
 struct _NMCheckpointClass {
@@ -30,13 +37,7 @@ struct _NMCheckpointClass {
 
 G_DEFINE_TYPE (NMCheckpoint, nm_checkpoint, NM_TYPE_OBJECT)
 
-#define NM_CHECKPOINT_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), NM_TYPE_CHECKPOINT, NMCheckpointPrivate))
-
-typedef struct {
-	GPtrArray *devices;
-	gint64 created;
-	guint32 rollback_timeout;
-} NMCheckpointPrivate;
+#define NM_CHECKPOINT_GET_PRIVATE(self) _NM_GET_PRIVATE (self, NMCheckpoint, NM_IS_CHECKPOINT)
 
 enum {
 	PROP_0,
@@ -112,7 +113,7 @@ nm_checkpoint_init (NMCheckpoint *checkpoint)
 static void
 finalize (GObject *object)
 {
-	NMCheckpointPrivate *priv = NM_CHECKPOINT_GET_PRIVATE (object);
+	NMCheckpointPrivate *priv = NM_CHECKPOINT_GET_PRIVATE (NM_CHECKPOINT (object));
 
 	g_ptr_array_unref (priv->devices);
 
@@ -147,7 +148,7 @@ get_property (GObject *object,
 static void
 init_dbus (NMObject *object)
 {
-	NMCheckpointPrivate *priv = NM_CHECKPOINT_GET_PRIVATE (object);
+	NMCheckpointPrivate *priv = NM_CHECKPOINT_GET_PRIVATE (NM_CHECKPOINT (object));
 	const NMPropertiesInfo property_info[] = {
 		{ NM_CHECKPOINT_DEVICES,            &priv->devices, NULL, NM_TYPE_DEVICE },
 		{ NM_CHECKPOINT_CREATED,            &priv->created },
@@ -168,8 +169,6 @@ nm_checkpoint_class_init (NMCheckpointClass *checkpoint_class)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS (checkpoint_class);
 	NMObjectClass *nm_object_class = NM_OBJECT_CLASS (checkpoint_class);
-
-	g_type_class_add_private (checkpoint_class, sizeof (NMCheckpointPrivate));
 
 	object_class->get_property = get_property;
 	object_class->finalize = finalize;
