@@ -241,6 +241,91 @@ _parse_ip_route (int family,
 	return route;
 }
 
+static NMTeamLinkWatcher *
+_parse_team_link_watcher (const char *str,
+                          GError **error)
+{
+	gs_strfreev char **watcherv = NULL;
+	gs_free char *str_clean = NULL;
+	guint i;
+	gs_free const char *name = NULL;
+	int val1 = 0, val2 = 0, val3 = 0;
+	gs_free const char *target_host = NULL;
+	gs_free const char *source_host = NULL;
+	NMTeamLinkWatcherArpPingFlags flags = 0;
+	NMTeamLinkWatcher *watcher;
+
+	nm_assert (str);
+	nm_assert (!error || !*error);
+
+	str_clean = g_strstrip (g_strdup (str));
+	watcherv = nmc_strsplit_set (str_clean, " \t", 0);
+	if (!watcherv || !watcherv[0]) {
+		g_set_error (error, 1, 0, "'%s' is not valid.", str);
+		return NULL;
+	}
+
+	for (i = 0; watcherv[i]; i++) {
+		gs_strfreev char **pair = NULL;
+
+		pair = nmc_strsplit_set (watcherv[i], "=:", 0);
+		if (!pair[0]) {
+			g_set_error (error, 1, 0, "'%s' is not valid: %s", watcherv[i],
+			             "properties should be specified as 'key=value'.");
+			return NULL;
+		}
+		if (!pair[1]) {
+			g_set_error (error, 1, 0, "'%s' is not valid: %s", watcherv[i],
+			             "missing key value.");
+			return NULL;
+		}
+		if (pair[2]) {
+			g_set_error (error, 1, 0, "'%s' is not valid: %s", watcherv[i],
+			             "properties should be specified as 'key=value'.");
+			return NULL;
+		}
+
+		if (nm_streq (pair[0], "name"))
+			name = g_strdup (pair[1]);
+		else if (   nm_streq (pair[0], "delay-up")
+		         || nm_streq (pair[0], "init-wait"))
+			val1 = _nm_utils_ascii_str_to_int64 (pair[1], 10, 0, G_MAXINT32, -1);
+		else if (   nm_streq (pair[0], "delay-down")
+		         || nm_streq (pair[0], "interval"))
+			val2 = _nm_utils_ascii_str_to_int64 (pair[1], 10, 0, G_MAXINT32, -1);
+		else if (nm_streq (pair[0], "missed-max"))
+			val3 = _nm_utils_ascii_str_to_int64 (pair[1], 10, 0, G_MAXINT32, -1);
+		else if (nm_streq (pair[0], "target-host"))
+			target_host = g_strdup (pair[1]);
+		else if (nm_streq (pair[0], "source-host"))
+			source_host = g_strdup (pair[1]);
+		else if (nm_streq (pair[0], "validate-active")) {
+			if (nm_streq (pair[1], "true"))
+				flags |= NM_TEAM_LINK_WATCHER_ARP_PING_FLAG_VALIDATE_ACTIVE;
+		} else if (nm_streq (pair[0], "validate-inactive")) {
+			if (nm_streq (pair[1], "true"))
+				flags |= NM_TEAM_LINK_WATCHER_ARP_PING_FLAG_VALIDATE_INACTIVE;
+		} else if (nm_streq (pair[0], "send-always")) {
+			if (nm_streq (pair[1], "true"))
+				flags |= NM_TEAM_LINK_WATCHER_ARP_PING_FLAG_SEND_ALWAYS;
+		} else {
+			g_set_error (error, 1, 0, "'%s' is not valid: %s", watcherv[i],
+			             "unknown key.");
+			return NULL;
+		}
+
+		if ((val1 < 0) || (val2 < 0) || (val3 < 0)) {
+			g_set_error (error, 1, 0, "'%s' is not valid: %s", watcherv[i],
+			             "value is not a valid number [0, MAXINT].");
+			return NULL;
+		}
+	}
+
+	watcher = nm_team_link_watcher_new (name, val1, val2, val3, target_host,
+	                                    source_host, flags, error);
+	return watcher;
+}
+
 /* Max priority values from libnm-core/nm-setting-vlan.c */
 #define MAX_SKB_PRIO   G_MAXUINT32
 #define MAX_8021P_PRIO 7  /* Max 802.1p priority */
@@ -3698,6 +3783,114 @@ DEFINE_REMOVER_INDEX_OR_VALUE (_remove_fcn_team_runner_tx_hash,
                                _validate_and_remove_team_runner_tx_hash)
 
 static gconstpointer
+_get_fcn_team_link_watchers (ARGS_GET_FCN)
+{
+	NMSettingTeam *s_team = NM_SETTING_TEAM (setting);
+	GString *printable;
+	guint32 num_watchers, i;
+	NMTeamLinkWatcher *watcher;
+
+	RETURN_UNSUPPORTED_GET_TYPE ();
+
+	printable = g_string_new (NULL);
+
+	num_watchers = nm_setting_team_get_num_link_watchers (s_team);
+	for (i = 0; i < num_watchers; i++) {
+		const char *name;
+		int int_val;
+		NMTeamLinkWatcherArpPingFlags flags;
+
+		if (printable->len > 0)
+			g_string_append (printable, ", ");
+
+		watcher = nm_setting_team_get_link_watcher (s_team, i);
+		name = nm_team_link_watcher_get_name (watcher);
+		g_string_append_printf (printable, "%s=%s",
+		                        "name", name);
+
+		if (nm_streq (name, NM_TEAM_LINK_WATCHER_ETHTOOL)) {
+			int_val = nm_team_link_watcher_get_delay_up (watcher);
+			if (int_val)
+				g_string_append_printf (printable, " %s=%d", "delay-up", int_val);
+			int_val = nm_team_link_watcher_get_delay_down (watcher);
+			if (int_val)
+				g_string_append_printf (printable, " %s=%d", "delay-down", int_val);
+			continue;
+		}
+		/* NM_SETTING_TEAM_LINK_WATCHER_NSNA_PING and NM_SETTING_TEAM_LINK_WATCHER_ARP_PING */
+		int_val = nm_team_link_watcher_get_init_wait (watcher);
+		if (int_val)
+			g_string_append_printf (printable, " %s=%d", "init-wait", int_val);
+		int_val = nm_team_link_watcher_get_interval (watcher);
+		if (int_val)
+			g_string_append_printf (printable, " %s=%d", "initerval", int_val);
+		int_val = nm_team_link_watcher_get_missed_max (watcher);
+		if (int_val)
+			g_string_append_printf (printable, " %s=%d", "missed-max", int_val);
+		g_string_append_printf (printable, " target-host=%s",
+		                        nm_team_link_watcher_get_target_host (watcher));
+		if (nm_streq (name, NM_TEAM_LINK_WATCHER_NSNA_PING))
+			continue;
+
+		g_string_append_printf (printable, " source-host=%s",
+		                        nm_team_link_watcher_get_source_host (watcher));
+		flags = nm_team_link_watcher_get_flags (watcher);
+		if (flags & NM_TEAM_LINK_WATCHER_ARP_PING_FLAG_VALIDATE_ACTIVE)
+			g_string_append_printf (printable, " validate-active=true");
+		if (flags & NM_TEAM_LINK_WATCHER_ARP_PING_FLAG_VALIDATE_INACTIVE)
+			g_string_append_printf (printable, " validate-inactive=true");
+		if (flags & NM_TEAM_LINK_WATCHER_ARP_PING_FLAG_SEND_ALWAYS)
+			g_string_append_printf (printable, "send-always=true");
+	}
+
+	RETURN_STR_TO_FREE (g_string_free (printable, FALSE));
+}
+
+static gboolean
+_set_fcn_team_link_watchers (ARGS_SET_FCN)
+{
+	gs_strfreev char **strv = NULL;
+	const char *const*iter;
+	NMTeamLinkWatcher *watcher;
+
+	strv = nmc_strsplit_set (value, ",", 0);
+	for (iter = (const char *const*) strv; *iter; iter++) {
+		watcher = _parse_team_link_watcher (*iter, error);
+		if (!watcher)
+			return FALSE;
+		nm_setting_team_add_link_watcher (NM_SETTING_TEAM (setting), watcher);
+		nm_team_link_watcher_unref (watcher);
+	}
+	return TRUE;
+}
+
+static gboolean
+_validate_and_remove_team_link_watcher (NMSettingTeam *setting,
+                                        const char *watcher_str,
+                                        GError **error)
+{
+	NMTeamLinkWatcher *watcher;
+	gboolean ret;
+
+	watcher = _parse_team_link_watcher (watcher_str, error);
+	if (!watcher)
+		return FALSE;
+
+	ret = nm_setting_team_remove_link_watcher_by_value (setting, watcher);
+	if (!ret) {
+		g_set_error (error, 1, 0, _("the property doesn't contain link watcher '%s'"),
+		             watcher_str);
+	}
+	nm_team_link_watcher_unref (watcher);
+	return ret;
+}
+DEFINE_REMOVER_INDEX_OR_VALUE (_remove_fcn_team_link_watchers,
+                               NM_SETTING_TEAM,
+                               nm_setting_team_get_num_link_watchers,
+                               nm_setting_team_remove_link_watcher,
+                               _validate_and_remove_team_link_watcher)
+
+static gconstpointer
 _get_fcn_vlan_flags (ARGS_GET_FCN)
 {
 	NMSettingVlan *s_vlan = NM_SETTING_VLAN (setting);
@@ -6177,6 +6370,27 @@ static const NMMetaPropertyInfo *const property_infos_TEAM[] = {
 			                                           NM_SETTING_TEAM_RUNNER_AGG_SELECT_POLICY_BANDWIDTH,
 			                                           NM_SETTING_TEAM_RUNNER_AGG_SELECT_POLICY_COUNT,
 			                                           NM_SETTING_TEAM_RUNNER_AGG_SELECT_POLICY_PORT_CONFIG),
+		),
+	),
+	PROPERTY_INFO_WITH_DESC (NM_SETTING_TEAM_LINK_WATCHERS,
+		.describe_message =
+		    N_("Enter a list of link watchers formatted as a dictionary where the keys "
+		       "are teamd properties. They change on the basis of the link watcher type. "
+		       "The only property which is common to all the link watchers is:\n"
+		       "  *name\n"
+		       "which defines the link watcher to be specified (ethtool, nsna_ping or arp_ping).\n\n"
+		       "Properties available for the ethtool link watcher:\n"
+		       "  delay_up, delay_down\n\n"
+		       "Properties available for the nsna_ping link watcher:\n"
+		       "  init_wait, interval, missed_max, *target_host\n\n"
+		       "Properties available for the arp_ping include all the ones for nsna_ping and:\n"
+		       "  *source_host, validate_active, validate_inactive, send_always\n\n"
+		       "properties flagged with a '*' are mandatory.\n\n"
+		       "Example: name=arp_ping, source_host=172.16.1.1, target_host=172.16.1.254"),
+		.property_type = DEFINE_PROPERTY_TYPE (
+			.get_fcn =                  _get_fcn_team_link_watchers,
+			.set_fcn =                  _set_fcn_team_link_watchers,
+			.remove_fcn =               _remove_fcn_team_link_watchers,
 		),
 	),
 	NULL
