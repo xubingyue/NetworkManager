@@ -4497,6 +4497,46 @@ key_already_there:
 	json_decref (value);
 }
 
+static NMTeamLinkWatcher *
+_nm_utils_team_link_watcher_from_json (json_t *json_element)
+{
+	const char *j_key;
+	json_t *j_val;
+	char *name = NULL, *target_host = NULL, *source_host = NULL;
+	int val1 = 0, val2 = 0, val3 = 3;
+	NMTeamLinkWatcherArpPingFlags flags = 0;
+
+	g_return_val_if_fail (json_element, NULL);
+
+	json_object_foreach (json_element, j_key, j_val) {
+		if (nm_streq (j_key, "name"))
+			name = strdup (json_string_value (j_val));
+		else if (nm_streq (j_key, "target_host"))
+			target_host = strdup (json_string_value (j_val));
+		else if (nm_streq (j_key, "source_host"))
+			source_host = strdup (json_string_value (j_val));
+		else if (NM_IN_STRSET (j_key, "delay_up", "init_wait"))
+			val1 = json_integer_value (j_val);
+		else if (NM_IN_STRSET (j_key, "delay_down", "interval"))
+			val2 = json_integer_value (j_val);
+		else if (nm_streq (j_key, "missed_max"))
+			val3 = json_integer_value (j_val);
+		else if (nm_streq (j_key, "validate_active")) {
+			if (json_is_true (j_val))
+				flags &= NM_TEAM_LINK_WATCHER_ARP_PING_FLAG_VALIDATE_ACTIVE;
+		} else if (nm_streq (j_key, "validate_inactive")) {
+			if (json_is_true (j_val))
+				flags &= NM_TEAM_LINK_WATCHER_ARP_PING_FLAG_VALIDATE_INACTIVE;
+		} else if (nm_streq (j_key, "send_always")) {
+			if (json_is_true (j_val))
+				flags &= NM_TEAM_LINK_WATCHER_ARP_PING_FLAG_SEND_ALWAYS;
+		}
+	}
+
+	return nm_team_link_watcher_new (name, val1, val2, val3, target_host,
+	                                 source_host, flags, NULL);
+}
+
 GValue *
 _nm_utils_team_config_get (const char *conf,
                            const char *key,
@@ -4571,6 +4611,31 @@ _nm_utils_team_config_get (const char *conf,
 		} else if (json_is_boolean (json_element)) {
 			g_value_init (value, G_TYPE_BOOLEAN);
 			g_value_set_boolean (value, json_boolean_value (json_element));
+		} else if (nm_streq (key, "link_watch")) {
+			NMTeamLinkWatcher *watcher;
+			GPtrArray *data = g_ptr_array_new_with_free_func
+			                  ((GDestroyNotify) nm_team_link_watcher_unref);
+
+			if (json_is_array (json_element)) {
+				json_t *j_watcher;
+				int index;
+
+				json_array_foreach (json_element, index, j_watcher) {
+					watcher = _nm_utils_team_link_watcher_from_json (j_watcher);
+					if (watcher)
+						g_ptr_array_add (data, watcher);
+				}
+			} else {
+				watcher = _nm_utils_team_link_watcher_from_json (json_element);
+				if (watcher)
+					g_ptr_array_add (data, watcher);
+			}
+			if (data->len) {
+				g_value_init (value, G_TYPE_PTR_ARRAY);
+				g_value_take_boxed (value, data);
+			} else
+				g_ptr_array_free (data, TRUE);
+
 		} else if (json_is_array (json_element)) {
 			GPtrArray *data = g_ptr_array_new_with_free_func ((GDestroyNotify) g_free);
 			json_t *str_element;
